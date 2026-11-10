@@ -14,10 +14,17 @@ function bina() {
     getLastRow() { let n = rows.length; while (n > 0 && !(rows[n - 1] || []).some((x) => x !== '' && x !== undefined)) n--; return n; },
     getDataRange() { return this.getRange(1, 1, Math.max(1, this.getLastRow()), this.getLastColumn()); },
     appendRow(v) { rows.length = this.getLastRow(); rows.push(v); }, deleteRow(i) { rows.splice(i - 1, 1); }, setFrozenRows() {} }; };
-  const ss = { getSheetByName: (n) => sheets[n], insertSheet: (n) => (sheets[n] = mkSheet()) };
+  const jadiSs = (store, id, nama) => ({ id, nama, getId: () => id, getName() { return this.nama; }, rename(n) { this.nama = n; },
+    getSheetByName: (n) => store[n], getSheets: () => Object.values(store),
+    insertSheet: (n) => { const sh = mkSheet(); sh.nama = n; sh.getName = () => sh.nama; sh.setName = (x) => { delete store[sh.nama]; sh.nama = x; store[x] = sh; return sh; }; store[n] = sh; return sh; },
+    deleteSheet: (sh) => { delete store[sh.nama]; } });
+  const ss = jadiSs(sheets, 'utama', 'e-Cuti'), sandaran = {}, pencetus = [];
   const signed = (buf) => [...buf].map((b) => (b > 127 ? b - 256 : b));
   const ctx = { console, JSON, Date, Math, parseInt, Array, String,
-    SpreadsheetApp: { getActiveSpreadsheet: () => ss, openById: () => ss, flush() {} },
+    SpreadsheetApp: { getActiveSpreadsheet: () => ss, openById: (id) => sandaran[id] || ss, flush() {},
+      create: (nama) => { const id = 'sandaran-' + (Object.keys(sandaran).length + 1); const f = jadiSs({}, id, nama); f.insertSheet('Sheet1'); sandaran[id] = f; return f; } },
+    ScriptApp: { WeekDay: { SUNDAY: 'SUNDAY' }, getProjectTriggers: () => pencetus.map((h) => ({ getHandlerFunction: () => h })),
+      newTrigger: (h) => { const b = { timeBased: () => b, onWeekDay: () => b, atHour: () => b, create: () => { pencetus.push(h); } }; return b; } },
     Utilities: { getUuid: () => crypto.randomUUID(), DigestAlgorithm: { SHA_256: 1 }, Charset: { UTF_8: 1 },
       computeDigest: (a, s) => signed(crypto.createHash('sha256').update(s).digest()),
       computeHmacSha256Signature: (v, k) => signed(crypto.createHmac('sha256', String(k)).update(String(v)).digest()),
@@ -43,7 +50,7 @@ function bina() {
   post({ action: 'CHANGE_PASSWORD', token: tok, oldPassword: 'TukarSaya123', newPassword: 'Baru1234' });
   tok = post({ action: 'LOGIN', emel: 'admin@smiaag.edu.my', password: 'Baru1234' }).token;
   const g = post({ action: 'ADD_USER', token: tok, emel: 'guru.satu@contoh.test', nama: 'Guru Contoh Satu', role: 'GURU' });
-  return { ctx, post, props, sheets, cache, mel, files, adminToken: tok, guruSementara: g.tempPassword };
+  return { ctx, post, props, sheets, cache, mel, files, sandaran, pencetus, adminToken: tok, guruSementara: g.tempPassword };
 }
 
 module.exports = { bina };

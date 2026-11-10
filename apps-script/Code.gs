@@ -7,7 +7,7 @@ var SESSION_TTL_HOURS = 12;
 var MAX_LOGIN_ATTEMPTS = 8; 
 var RATE_LIMIT_MINUTES = 5; 
 var PASSWORD_MIN = 8; // untuk kata laluan BAHARU; kata laluan lama yang lebih pendek masih boleh log masuk
-var SERVER_VERSI = "2.5"; // dipapar di bawah halaman (index.html v2.1+). Naikkan bila Code.gs berubah.
+var SERVER_VERSI = "2.6"; // dipapar di bawah halaman (index.html v2.1+). Naikkan bila Code.gs berubah.
 
 // Kelajuan: Spreadsheet dibuka sekali setiap larian; semakan tajuk tab dibuat sekali dan diingat 10 minit.
 var _SS = null, _TAB = {};
@@ -870,7 +870,7 @@ function handleGetAttachment(payload, sessionCheck) {
     var milik = data[i][2].toString().toLowerCase() === sessionCheck.emel.toLowerCase();
     if (sessionCheck.role !== "ADMIN" && !milik) return jsonResponse({ success: false, message: "Capaian ditolak." });
     var lamp = bacaLampiran(data[i][11]);
-    if (!lamp) return jsonResponse({ success: false, message: "Tiada lampiran." });
+    if (!lamp) return jsonResponse({ success: false, message: /"dipadam"/.test(String(data[i][11])) ? "Lampiran telah dipadam selepas tempoh simpanan " + TAHUN_SIMPAN + " tahun." : "Tiada lampiran." });
     var blob = DriveApp.getFileById(lamp.fileId).getBlob();
     logActivity(sessionCheck.emel, "LIHAT_LAMPIRAN", payload.appId);
     return jsonResponse({ success: true, name: lamp.name, mime: blob.getContentType(), base64: Utilities.base64Encode(blob.getBytes()) });
@@ -985,5 +985,99 @@ function handleApproveLeave(payload, sessionCheck) {
     return jsonResponse({ success: true, message: "Status dikemaskini & emel dihantar." });
   }
   return jsonResponse({ success: false, message: "Permohonan tidak dijumpai." });
+}
+
+// ====================================================================
+// PENYELENGGARAAN MINGGUAN: tempoh simpanan (PDPA) dan sandaran
+// Jalankan pasangPencetus() SEKALI dari editor Apps Script. Selepas itu selenggaraMingguan berjalan setiap Ahad 3 pagi.
+// ====================================================================
+var TAHUN_SIMPAN = 2;          // lampiran dan log aktiviti disimpan 2 tahun
+var SANDARAN_BILANGAN = 4;     // bilangan salinan sandaran yang disimpan (bergilir)
+var SANDARAN_TANPA = ["Sessions"]; // token log masuk tidak disalin
+
+function pasangPencetus() {
+  var ada = ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === "selenggaraMingguan"; });
+  if (!ada) ScriptApp.newTrigger("selenggaraMingguan").timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(3).create();
+  var mesej = "Pencetus selenggaraMingguan (Ahad 3 pagi) " + (ada ? "sudah wujud." : "dipasang.");
+  Logger.log(mesej);
+  return mesej;
+}
+
+function selenggaraMingguan() {
+  var hasil = [];
+  try { hasil.push(bersihkanLampiranLama()); } catch (e) { hasil.push("Lampiran: RALAT " + e); }
+  try { hasil.push(bersihkanLogLama()); } catch (e) { hasil.push("Log: RALAT " + e); }
+  try { hasil.push(sandaranEcuti()); } catch (e) { hasil.push("Sandaran: RALAT " + e); }
+  Logger.log(hasil.join("\n"));
+  return hasil;
+}
+
+function tarikhHadSimpan() {
+  var d = new Date();
+  d.setFullYear(d.getFullYear() - TAHUN_SIMPAN);
+  return Utilities.formatDate(d, TZ, "yyyy-MM-dd");
+}
+
+// Lampiran (surat, MC) dibuang ke Trash Drive 2 tahun selepas tarikh akhir cuti. Rekod permohonan kekal.
+function bersihkanLampiranLama() {
+  var had = tarikhHadSimpan();
+  var sheet = pastikanTab("PermohonanCuti", HEADER_CUTI);
+  var data = sheet.getDataRange().getValues(), n = 0;
+  for (var i = 1; i < data.length; i++) {
+    var lamp = bacaLampiran(data[i][11]), akhir = toYMD(data[i][5]);
+    if (!lamp || !isValidYMD(akhir) || akhir >= had) continue;
+    try { DriveApp.getFileById(lamp.fileId).setTrashed(true); } catch (e) { /* fail sudah tiada */ }
+    sheet.getRange(i + 1, 12).setValue(JSON.stringify({ name: lamp.name, dipadam: Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd") }));
+    n++;
+  }
+  if (n) logActivity("sistem", "PADAM_LAMPIRAN_LAMA", n + " fail");
+  return "Lampiran: " + n + " fail melebihi " + TAHUN_SIMPAN + " tahun dipadam.";
+}
+
+// Log aktiviti melebihi 2 tahun dibuang (baris lama berada di atas).
+function bersihkanLogLama() {
+  var had = new Date(); had.setFullYear(had.getFullYear() - TAHUN_SIMPAN);
+  var sheet = pastikanTab("Log", ["Masa", "Emel", "Tindakan", "Status"]);
+  var data = sheet.getDataRange().getValues(), n = 0;
+  for (var i = 1; i < data.length; i++) {
+    var m = data[i][0], t = (m instanceof Date) ? m.getTime() : Date.parse(m);
+    if (!(t < had.getTime())) break;
+    n++;
+  }
+  for (var k = 0; k < n; k++) sheet.deleteRow(2);
+  return "Log: " + n + " baris melebihi " + TAHUN_SIMPAN + " tahun dibuang.";
+}
+
+// Sandaran ke Spreadsheet berasingan dalam Drive pemilik skrip; 4 salinan terakhir, yang paling lama ditulis semula.
+// Fail sandaran mengandungi data pengguna dan hash kata laluan: JANGAN kongsi.
+function sandaranEcuti() {
+  var props = PropertiesService.getScriptProperties(), ids = [];
+  try { ids = JSON.parse(props.getProperty("SANDARAN_IDS") || "[]"); } catch (e) { ids = []; }
+  var sumber = bukaSpreadsheet();
+  var nama = "SANDARAN e-Cuti SMIAAG " + Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd HH.mm");
+  var sasaran = null, id = null;
+  if (ids.length >= SANDARAN_BILANGAN) {
+    id = ids.pop();
+    try { sasaran = SpreadsheetApp.openById(id); sasaran.rename(nama); } catch (e) { sasaran = null; }
+  }
+  if (!sasaran) { sasaran = SpreadsheetApp.create(nama); id = sasaran.getId(); }
+  var lama = sasaran.getSheets(), bil = 0;
+  sumber.getSheets().forEach(function(sh) {
+    var n = sh.getName();
+    if (SANDARAN_TANPA.indexOf(n) !== -1) return;
+    var r = sh.getLastRow(), c = sh.getLastColumn();
+    var t = sasaran.insertSheet("~" + n);
+    if (r > 0 && c > 0) {
+      t.getRange(1, 1, r, c).setValues(sh.getRange(1, 1, r, c).getValues().map(function(row) {
+        return row.map(function(v) { return typeof v === "string" && /^[=+\-@]/.test(v) ? "'" + v : v; }); // jangan jadi formula dalam sandaran
+      }));
+    }
+    bil++;
+  });
+  lama.forEach(function(x) { sasaran.deleteSheet(x); });
+  sasaran.getSheets().forEach(function(x) { x.setName(x.getName().replace(/^~/, "")); });
+  ids.unshift(id);
+  props.setProperty("SANDARAN_IDS", JSON.stringify(ids.slice(0, SANDARAN_BILANGAN)));
+  return "Sandaran: \"" + nama + "\" (" + bil + " tab).";
 }
 

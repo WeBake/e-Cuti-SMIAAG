@@ -33,13 +33,30 @@ Kalau Code.gs dan index.html sama-sama berubah, deploy Apps Script DULU, baru me
 
 ## Tab Google Sheets
 
-`Users`, `Sessions`, `PermohonanCuti`, `Log`, `DATA_GURU`, `TarikhTanpaHad`, `SabtuProgram` — semua dicipta automatik oleh `pastikanTab()` kecuali `DATA_GURU` (diisi manual: `NAMA_GURU`, `BIL_CUTI_TAHUNAN_BERBAKI` = kelayakan setahun).
+`Users`, `Sessions`, `PermohonanCuti`, `Log`, `DATA_GURU`, `TarikhTanpaHad`, `SabtuProgram`, `CutiSekolah` — semua dicipta automatik oleh `pastikanTab()` kecuali `DATA_GURU` (diisi manual: `NAMA_GURU`, `BIL_CUTI_TAHUNAN_BERBAKI` = kelayakan setahun, `EMEL` pilihan).
 
 ## Keselamatan
 
 - Jangan "Publish to web" mana-mana tab Sheet.
 - Repo ini public: jangan commit Sheet ID, password, atau data guru.
 - Salt password disimpan dalam Script Properties (`APP_SECURITY_SALT`), bukan dalam kod.
+
+## Kata laluan, baki, cuti dan penyelenggaraan (v2.6)
+
+- **Kata laluan:** kata laluan baharu minimum 8 aksara. Pengguna baharu menerima kata laluan sementara rawak melalui
+  emel; ia juga dipaparkan sekali kepada admin. Kod reset dijana daripada penjana rawak (bukan `Math.random`).
+- **Baki cuti ikut emel:** tab `DATA_GURU` ada lajur pilihan `EMEL`. Jika diisi, baki dipadankan ikut emel; jika kosong,
+  ikut nama akaun (huruf besar/kecil diabaikan). Jalankan `isiEmelDataGuru` sekali dari editor untuk mengisi lajur itu;
+  nama yang tiada akaun sepadan disenaraikan dalam log.
+- **Cuti umum / sekolah:** tab `CutiSekolah` (`Tarikh`, `Nama`). Kalendar Akademik 2027 Kumpulan B (pekeliling KPM)
+  diisi automatik sekali. Hari cuti tidak dikira sebagai hari cuti dan tidak boleh dimohon. Cuti lain (Hari Pekerja,
+  Hari Kebangsaan, cuti negeri, cuti peristiwa, cuti ganti) ditambah admin: Tetapan Tarikh Khas > Cuti Umum / Sekolah.
+  Untuk tahun baharu, tambah senarai baharu dalam `Code.gs` (contoh `CUTI_KPM_2027_B`) atau masukkan melalui admin.
+- **Kelajuan:** sesi sah dicache 5 minit dan dibatalkan serta-merta bila sesi dipadam.
+- **Penyelenggaraan mingguan:** jalankan `pasangPencetus` SEKALI dari editor. Setiap Ahad 3 pagi `selenggaraMingguan`:
+  membuang lampiran 2 tahun selepas tarikh cuti (rekod permohonan kekal), membuang log melebihi 2 tahun, dan membuat
+  sandaran ke Spreadsheet "SANDARAN e-Cuti SMIAAG <tarikh>" (4 salinan terakhir, tanpa tab `Sessions`).
+  Fail sandaran mengandungi data pengguna: jangan kongsi.
 
 ## Log masuk sekali dari Profil Guru (SSO)
 
