@@ -1,0 +1,49 @@
+name: Pratonton GitHub Pages
+
+# Terbit folder public/ ke GitHub Pages sebagai pratonton (Netlify kekal laman sebenar).
+# Sediakan sekali: Settings > Pages > Source: GitHub Actions. Repo mesti public (atau pelan GitHub berbayar).
+# Pilihan: Settings > Secrets and variables > Actions > Variables > GAS_URL = URL Web App Apps Script PRATONTON
+#          (deployment berasingan). Jika kosong, pratonton guna GAS_URL dalam index.html (server sebenar).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['public/**', '.github/workflows/pages.yml']
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sediakan fail
+        env:
+          GAS_URL: ${{ vars.GAS_URL }}
+        run: |
+          set -euo pipefail
+          cp -r public _site
+          if [ -n "${GAS_URL}" ]; then
+            case "${GAS_URL}" in https://script.google.com/macros/s/*/exec) ;; *) echo "::error::GAS_URL mesti URL Web App yang berakhir /exec"; exit 1;; esac
+            sed -i -E "s#const GAS_URL = \"[^\"]*\";#const GAS_URL = \"${GAS_URL}\";#" _site/index.html
+            grep -q "const GAS_URL = \"${GAS_URL}\";" _site/index.html || { echo "::error::GAS_URL tidak dapat ditukar"; exit 1; }
+            echo "Pratonton guna server: GAS_URL daripada repository variable"
+          else
+            echo "Pratonton guna GAS_URL dalam index.html (server sebenar)"
+          fi
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
