@@ -6,6 +6,7 @@ var SPREADSHEET_ID = ""; // <-- TAMPAL GOOGLE SHEET ID ANDA DI SINI
 var SESSION_TTL_HOURS = 12; 
 var MAX_LOGIN_ATTEMPTS = 8; 
 var RATE_LIMIT_MINUTES = 5; 
+var SERVER_VERSI = "2.2"; // dipapar di bawah halaman (index.html v2.1+). Naikkan bila Code.gs berubah.
 
 function pastikanTab(namaTab, senaraiHeader) {
   var ss = SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
@@ -338,7 +339,7 @@ function kiraPenggunaanKuota(dataCuti, sabtuProgram) {
 }
 
 function handleGetUnlimitedDates() {
-  return jsonResponse({ success: true, data: getTarikhList("TANPA_HAD"), sabtu: getTarikhList("SABTU") });
+  return jsonResponse({ success: true, data: getTarikhList("TANPA_HAD"), sabtu: getTarikhList("SABTU"), versi: SERVER_VERSI });
 }
 
 function handleAddUnlimitedDate(payload, sessionCheck) {
@@ -412,6 +413,7 @@ function doPost(e) {
 
     // 1. ACTION AWAM (tanpa token)
     if (payload.action === "LOGIN") return handleLogin(payload);
+    if (payload.action === "SSO_LOGIN") return handleSsoLogin(payload);
     if (payload.action === "MINTA_KOD_RESET") return handleMintaKodReset(payload);
     if (payload.action === "SAHKAN_KOD_RESET") return handleSahkanKodReset(payload);
     if (payload.action === "GET_UNLIMITED_DATES") return handleGetUnlimitedDates();
@@ -471,6 +473,73 @@ function handleLogin(payload) {
   }
   logActivity(emel, "LOGIN", "FAILED_WRONG_CREDENTIALS");
   return jsonResponse({ success: false, message: "Emel atau kata laluan tidak sah." });
+}
+
+// ====================================================================
+// LOG MASUK SEKALI (SSO) DARIPADA SISTEM PROFIL GURU SMIAAG
+// Profil Guru mengeluarkan tiket: base64url(JSON) + "." + base64url(HMAC-SHA256(bahagian1, ECUTI_SSO_SECRET)).
+// Kunci ECUTI_SSO_SECRET disalin ke Script Properties projek ini (nilai SAMA dengan projek Profil Guru).
+// Tiket sah 60 saat, sekali guna (nonce). Pengguna dipadankan mengikut EMEL; peranan ikut tab Users e-Cuti.
+// ====================================================================
+function b64urlKeTeks(s) {
+  s = String(s).replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  return Utilities.newBlob(Utilities.base64Decode(s)).getDataAsString("UTF-8");
+}
+
+function b64urlDariBytes(bytes) { return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/, ""); }
+
+function samaMasaTetap(a, b) {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
+  var r = 0;
+  for (var i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return r === 0;
+}
+
+function handleSsoLogin(payload) {
+  var gagal = function(sebab, mesej, emel) {
+    logActivity(emel || "-", "SSO_LOGIN", sebab);
+    return jsonResponse({ success: false, message: mesej });
+  };
+  var rahsia = PropertiesService.getScriptProperties().getProperty("ECUTI_SSO_SECRET");
+  if (!rahsia) return gagal("FAILED_NOT_CONFIGURED", "Log masuk melalui Profil Guru belum disediakan.");
+  var tiket = String(payload.tiket || "");
+  var bah = tiket.split(".");
+  if (tiket.length > 4000 || bah.length !== 2 || !/^[A-Za-z0-9_-]+$/.test(bah[0]) || !/^[A-Za-z0-9_-]+$/.test(bah[1])) {
+    return gagal("FAILED_FORMAT", "Tiket log masuk tidak sah.");
+  }
+  var jangka = b64urlDariBytes(Utilities.computeHmacSha256Signature(bah[0], rahsia, Utilities.Charset.UTF_8));
+  if (!samaMasaTetap(jangka, bah[1])) return gagal("FAILED_SIGNATURE", "Tiket log masuk tidak sah.");
+
+  var d;
+  try { d = JSON.parse(b64urlKeTeks(bah[0])); } catch (e) { return gagal("FAILED_FORMAT", "Tiket log masuk tidak sah."); }
+  var kini = Math.floor(new Date().getTime() / 1000);
+  if (!d || d.v !== 1 || d.iss !== "smiaag-profil" || d.aud !== "ecuti" || typeof d.exp !== "number" || typeof d.iat !== "number" || typeof d.n !== "string") {
+    return gagal("FAILED_FORMAT", "Tiket log masuk tidak sah.");
+  }
+  if (d.exp < kini || d.iat > kini + 30 || d.exp - d.iat > 120) {
+    return gagal("FAILED_EXPIRED", "Tiket log masuk telah tamat tempoh. Tekan e-Cuti sekali lagi dalam Profil Guru.", d.emel);
+  }
+
+  // Nonce sekali guna (dalam kunci supaya dua permintaan serentak tidak lepas kedua-duanya)
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return gagal("FAILED_BUSY", "Pelayan sibuk. Cuba lagi.");
+  try {
+    var cache = CacheService.getScriptCache(), kunci = "SSO_N_" + d.n;
+    if (cache.get(kunci)) return gagal("FAILED_REPLAY", "Tiket log masuk sudah digunakan. Tekan e-Cuti sekali lagi dalam Profil Guru.", d.emel);
+    cache.put(kunci, "1", 600);
+  } finally { lock.releaseLock(); }
+
+  var emel = String(d.emel || "").trim().toLowerCase();
+  var u = emel ? cariPengguna(emel) : null;
+  if (!u) return gagal("FAILED_NO_USER", "Emel " + emel + " tiada akaun aktif dalam e-Cuti. Hubungi pentadbir e-Cuti.", emel);
+
+  buangSesiTamat();
+  var token = Utilities.getUuid() + "-" + Utilities.getUuid();
+  pastikanTab("Sessions", HEADER_SESSIONS).appendRow([token, emel, u.data[2], new Date().getTime() + (SESSION_TTL_HOURS * 60 * 60 * 1000)]);
+  logActivity(emel, "SSO_LOGIN", "SUCCESS");
+  // Pengguna sudah disahkan oleh Profil Guru: tidak dipaksa menukar kata laluan e-Cuti.
+  return jsonResponse({ success: true, token: token, emel: emel, nama: u.data[1], role: u.data[2], mestiTukarPassword: false });
 }
 
 function handleLogout(payload) {
