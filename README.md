@@ -40,3 +40,24 @@ Kalau Code.gs dan index.html sama-sama berubah, deploy Apps Script DULU, baru me
 - Jangan "Publish to web" mana-mana tab Sheet.
 - Repo ini public: jangan commit Sheet ID, password, atau data guru.
 - Salt password disimpan dalam Script Properties (`APP_SECURITY_SALT`), bukan dalam kod.
+
+## Log masuk sekali dari Profil Guru (SSO)
+
+Guru yang sudah log masuk ke Sistem Profil Guru (`WMT-Labs/smiaag-teacher-profile`) menekan menu **e-Cuti**, dan e-Cuti
+dibuka dalam tab baru tanpa log masuk semula. Log masuk biasa (emel + kata laluan) kekal untuk semua, termasuk STAF.
+
+- Profil Guru menghantar tiket dalam alamat `https://.../#sso=<tiket>`. Tiket ditandatangani HMAC-SHA256, sah 60 saat,
+  sekali guna, dan dibuang dari bar alamat serta-merta.
+- `SSO_LOGIN` (Code.gs) mengesahkan tiket, mencari pengguna **AKTIF mengikut emel** dalam tab `Users`, dan mencipta sesi.
+  **Peranan (ADMIN/GURU/STAF) ikut tab `Users` e-Cuti**, bukan Profil Guru.
+- Script Properties projek e-Cuti mesti ada `ECUTI_SSO_SECRET` dengan nilai yang SAMA seperti projek Profil Guru.
+  Tanpa nilai ini, SSO ditolak dan hanya log masuk biasa berfungsi.
+- Emel guru mesti sama dalam kedua-dua sistem (huruf besar/kecil tidak penting).
+- Log aktiviti: tindakan `SSO_LOGIN` dengan status `SUCCESS` / `FAILED_*` dalam tab `Log`.
+
+## Ujian
+
+```
+node --test tests/*.test.js
+```
+

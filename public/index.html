@@ -386,7 +386,7 @@
     const GAS_URL = "https://script.google.com/macros/s/AKfycbyIQ15mj6bJN1dbQ2HyZ-L03GlGqjd-xvaVwfhPB5HUp8MmLzDZZE0vNMsV6jarca90ZQ/exec";
     // ====================================================================
 
-    const VERSI_WEB = "v2.1"; // tukar bila index.html dikemas kini
+    const VERSI_WEB = "v2.2"; // tukar bila index.html dikemas kini
     const MAX_GURU_SEHARI = 3;
     const BULAN = ["Januari","Februari","Mac","April","Mei","Jun","Julai","Ogos","September","Oktober","November","Disember"];
 
@@ -433,7 +433,7 @@
     function closeConfirmModal() { document.getElementById('custom-confirm-modal').classList.add('hidden'); currentConfirmCallback = null; }
     document.getElementById('confirm-btn-yes').addEventListener('click', () => { const cb = currentConfirmCallback; closeConfirmModal(); if (cb) cb(); });
 
-    const ACTION_AWAM = ['LOGIN', 'MINTA_KOD_RESET', 'SAHKAN_KOD_RESET', 'GET_UNLIMITED_DATES'];
+    const ACTION_AWAM = ['LOGIN', 'SSO_LOGIN', 'MINTA_KOD_RESET', 'SAHKAN_KOD_RESET', 'GET_UNLIMITED_DATES'];
     async function apiPost(payload) {
       if (currentSessionToken && !payload.token && !ACTION_AWAM.includes(payload.action)) payload.token = currentSessionToken;
       try {
@@ -445,11 +445,34 @@
       } catch(e) { return { success: false, message: "Ralat rangkaian pelayan." }; }
     }
 
-    document.addEventListener("DOMContentLoaded", () => {
+    document.addEventListener("DOMContentLoaded", async () => {
       addReliefRow();
       updateFormAccess();
+      const tiket = ambilTiketSso();
+      if (tiket && await loginSso(tiket)) return;
       if (currentSessionToken) prepareDashboard(); else fetchPublicData();
     });
+
+    // Log masuk sekali dari Profil Guru: alamat https://.../#sso=<tiket>. Tiket dibuang dari bar alamat serta-merta.
+    function ambilTiketSso() {
+      const m = /^#sso=([A-Za-z0-9_.%-]+)$/.exec(location.hash || '');
+      if (!location.hash.startsWith('#sso=')) return null;
+      history.replaceState(null, '', location.pathname + location.search);
+      if (!m) return null;
+      try { return decodeURIComponent(m[1]); } catch (e) { return null; }
+    }
+
+    async function loginSso(tiket) {
+      showToast("Log Masuk...", "Log masuk melalui Profil Guru...", "info");
+      const res = await apiPost({ action: "SSO_LOGIN", tiket: tiket });
+      if (!res.success) { showToast("Log masuk Profil Guru gagal", (res.message || "") + " Anda boleh log masuk secara biasa.", "error"); return false; }
+      if (currentSessionToken && currentSessionToken !== res.token) apiPost({ action: "LOGOUT", token: currentSessionToken }); // sesi lama pada peranti ini
+      currentSessionToken = res.token; currentEmel = res.emel; currentRole = res.role; currentNama = res.nama;
+      ls.set('smiaag_admin_token', res.token); ls.set('smiaag_user_email', res.emel); ls.set('smiaag_user_role', res.role); ls.set('smiaag_user_nama', res.nama);
+      showToast("Akses Dibenarkan", `Selamat datang, ${res.nama}`, "success");
+      prepareDashboard();
+      return true;
+    }
 
     // ====================================================================
     // DATA
