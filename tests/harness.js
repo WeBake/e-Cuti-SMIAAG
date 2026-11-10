@@ -3,7 +3,7 @@
 const crypto = require('crypto'), fs = require('fs'), vm = require('vm'), path = require('path');
 
 function bina() {
-  const sheets = {}, cache = {}, props = {}, mel = [];
+  const sheets = {}, cache = {}, props = {}, mel = [], files = {};
   const mkSheet = () => { const rows = []; return { rows,
     getRange(r, c, nr = 1, nc = 1) { return {
       getValues: () => { const o = []; for (let i = 0; i < nr; i++) { o.push([]); for (let j = 0; j < nc; j++) o[i].push((rows[r - 1 + i] || [])[c - 1 + j] ?? ''); } return o; },
@@ -24,13 +24,15 @@ function bina() {
       base64EncodeWebSafe: (b) => Buffer.from(b.map((x) => (x + 256) % 256)).toString('base64').replace(/\+/g, '-').replace(/\//g, '_'),
       base64Decode: (s) => signed(Buffer.from(s, 'base64')),
       base64Encode: (b) => Buffer.from(b).toString('base64'),
-      newBlob: (d) => ({ getDataAsString: () => Buffer.from(d.map((x) => (x + 256) % 256)).toString('utf8') }),
+      newBlob: (d, m, n) => ({ d, m, n, getDataAsString: () => Buffer.from(d.map((x) => (x + 256) % 256)).toString('utf8') }),
       formatDate: (d) => d.toISOString().slice(0, 10) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: (k) => props[k] ?? null, setProperty: (k, v) => { props[k] = v; } }) },
     CacheService: { getScriptCache: () => ({ get: (k) => cache[k] ?? null, put: (k, v) => { cache[k] = String(v); }, remove: (k) => { delete cache[k]; },
       removeAll: (ks) => ks.forEach((k) => { delete cache[k]; }), getAll: (ks) => Object.fromEntries(ks.filter((k) => k in cache).map((k) => [k, cache[k]])) }) },
     LockService: { getScriptLock: () => ({ tryLock: () => true, waitLock() {}, releaseLock() {} }) },
-    DriveApp: { getFoldersByName: () => ({ hasNext: () => false }) },
+    DriveApp: { getFoldersByName: () => ({ hasNext: () => false }),
+      createFolder: () => ({ createFile: (b) => { const id = 'f' + Object.keys(files).length; files[id] = { blob: b, trashed: false }; return { getId: () => id }; } }),
+      getFileById: (id) => { if (!files[id]) throw new Error('tiada fail'); return { getBlob: () => ({ getContentType: () => files[id].blob.m, getBytes: () => files[id].blob.d }), setTrashed: (t) => { files[id].trashed = t; }, isTrashed: () => files[id].trashed }; } },
     MailApp: { sendEmail(to, subject, body) { mel.push({ to, subject, body }); } }, Logger: { log() {} },
     ContentService: { createTextOutput: (s) => ({ setMimeType() { return JSON.parse(s); } }), MimeType: { JSON: 1 } } };
   vm.createContext(ctx);
@@ -41,7 +43,7 @@ function bina() {
   post({ action: 'CHANGE_PASSWORD', token: tok, oldPassword: 'TukarSaya123', newPassword: 'Baru1234' });
   tok = post({ action: 'LOGIN', emel: 'admin@smiaag.edu.my', password: 'Baru1234' }).token;
   const g = post({ action: 'ADD_USER', token: tok, emel: 'guru.satu@contoh.test', nama: 'Guru Contoh Satu', role: 'GURU' });
-  return { ctx, post, props, sheets, cache, mel, adminToken: tok, guruSementara: g.tempPassword };
+  return { ctx, post, props, sheets, cache, mel, files, adminToken: tok, guruSementara: g.tempPassword };
 }
 
 module.exports = { bina };

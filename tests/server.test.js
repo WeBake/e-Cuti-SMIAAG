@@ -32,7 +32,7 @@ const ctx={console,JSON,Date,Math,parseInt,Array,String,
 vm.createContext(ctx);vm.runInContext(fs.readFileSync(''+require('path').join(__dirname,'..','apps-script','Code.gs')+'','utf8'),ctx);
 const post=p=>ctx.doPost({postData:{contents:JSON.stringify(p)}});
 ctx.setupAdminPertama();
-sheets.DATA_GURU=mkSheet('DATA_GURU');sheets.DATA_GURU.rows.push(["NAMA_GURU","BIL"],["Ali Bin Abu",10]);
+sheets.DATA_GURU=mkSheet('DATA_GURU');sheets.DATA_GURU.rows.push(["NAMA_GURU","BIL_CUTI_TAHUNAN_BERBAKI"],["Ali Bin Abu",10]);
 let r=post({action:"LOGIN",emel:"admin@smiaag.edu.my",password:"TukarSaya123"});console.log('login',r.success,r.mestiTukarPassword);
 let tok=r.token;
 console.log('blocked',post({action:"GET_USERS",token:tok}).mustChangePassword);

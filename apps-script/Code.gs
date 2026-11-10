@@ -662,20 +662,63 @@ function handleEditUser(payload, sessionCheck) {
   return jsonResponse({ success: true, message: "Maklumat pengguna berjaya dikemaskini." });
 }
 
-function handleGetDataGuru(sessionCheck) {
-  var data = pastikanTab("DATA_GURU", ["NAMA_GURU", "BIL_CUTI_TAHUNAN_BERBAKI"]).getDataRange().getValues();
-  var isAdmin = sessionCheck.role === "ADMIN";
-  var u = isAdmin ? null : cariPengguna(sessionCheck.emel);
-  var namaSendiri = u ? u.data[1].toString().trim() : "";
-  var teachers = [];
-  for (var i = 1; i < data.length; i++) {
-    if (!data[i][0]) continue;
-    var nama = data[i][0].toString().trim();
-    // Bukan admin: nampak senarai nama (untuk jadual relief), kelayakan hanya milik sendiri
-    var kelayakan = (isAdmin || nama === namaSendiri) ? (parseInt(data[i][1], 10) || 0) : null;
-    teachers.push({ NAMA_GURU: nama, BIL_CUTI_TAHUNAN_BERBAKI: kelayakan });
+// ---- Padanan guru antara DATA_GURU (kelayakan cuti), Users (akaun) dan PermohonanCuti ----
+// Padanan utama ialah EMEL (lajur EMEL dalam DATA_GURU). Jika lajur itu kosong, guna nama yang sama dalam Users
+// (abaikan huruf besar/kecil dan ruang berlebihan) selagi hanya SATU akaun aktif bernama begitu.
+function normNama(v) { return String(v === null || v === undefined ? "" : v).replace(/\s+/g, " ").trim().toUpperCase(); }
+
+function petaDataGuru() {
+  var sheet = pastikanTab("DATA_GURU", ["NAMA_GURU", "BIL_CUTI_TAHUNAN_BERBAKI", "EMEL"]);
+  var data = sheet.getDataRange().getValues();
+  var kepala = data[0].map(function(h) { return String(h).trim(); });
+  var iNama = kepala.indexOf("NAMA_GURU"), iBil = kepala.indexOf("BIL_CUTI_TAHUNAN_BERBAKI"), iEmel = kepala.indexOf("EMEL");
+  var users = pastikanTab("Users", HEADER_USERS).getDataRange().getValues();
+  var ikutNama = {};
+  for (var u = 1; u < users.length; u++) {
+    if (users[u][8] !== "ACTIVE") continue;
+    var k = normNama(users[u][1]);
+    (ikutNama[k] = ikutNama[k] || []).push(users[u][0].toString().toLowerCase());
   }
+  var senarai = [], emelKeNama = {};
+  for (var i = 1; i < data.length; i++) {
+    if (!data[i][iNama]) continue;
+    var nama = data[i][iNama].toString().trim();
+    var emel = iEmel > -1 ? String(data[i][iEmel] || "").trim().toLowerCase() : "";
+    var padan = emel ? "EMEL" : "";
+    if (!emel) { var c = ikutNama[normNama(nama)] || []; if (c.length === 1) { emel = c[0]; padan = "NAMA"; } }
+    if (emel && !emelKeNama[emel]) emelKeNama[emel] = nama;
+    senarai.push({ baris: i + 1, nama: nama, kelayakan: parseInt(data[i][iBil], 10) || 0, emel: emel, padan: padan });
+  }
+  return { sheet: sheet, lajurEmel: iEmel + 1, senarai: senarai, emelKeNama: emelKeNama };
+}
+
+function handleGetDataGuru(sessionCheck) {
+  var peta = petaDataGuru();
+  var isAdmin = sessionCheck.role === "ADMIN";
+  var emelSendiri = (sessionCheck.emel || "").toLowerCase();
+  var teachers = peta.senarai.map(function(g) {
+    var sendiri = !!g.emel && g.emel === emelSendiri;
+    // Bukan admin: nampak senarai nama (untuk jadual relief), kelayakan hanya milik sendiri
+    var t = { NAMA_GURU: g.nama, BIL_CUTI_TAHUNAN_BERBAKI: (isAdmin || sendiri) ? g.kelayakan : null, SENDIRI: sendiri };
+    if (isAdmin) { t.EMEL = g.emel; t.PADAN = g.padan; } // PADAN kosong = tiada akaun sepadan (isi lajur EMEL)
+    return t;
+  });
   return jsonResponse({ success: true, data: teachers });
+}
+
+/**
+ * Jalankan SEKALI dari editor Apps Script: isi lajur EMEL dalam DATA_GURU daripada akaun Users yang namanya sama.
+ * Baris yang tidak dapat dipadankan disenaraikan dalam log untuk diisi secara manual.
+ */
+function isiEmelDataGuru() {
+  var peta = petaDataGuru(), diisi = 0, tiada = [];
+  peta.senarai.forEach(function(g) {
+    if (g.padan === "NAMA") { peta.sheet.getRange(g.baris, peta.lajurEmel).setValue(sanitizeFormula(g.emel)); diisi++; }
+    else if (!g.padan) tiada.push(g.nama);
+  });
+  var mesej = diisi + " emel diisi. " + (tiada.length ? "Tiada akaun sepadan (isi lajur EMEL sendiri): " + tiada.join("; ") : "Semua guru dipadankan.");
+  Logger.log(mesej);
+  return mesej;
 }
 
 function bacaLampiran(raw) {
@@ -688,6 +731,7 @@ function handleGetLeaveApplications(payload, sessionCheck) {
   var apps = [];
   var isAdmin = sessionCheck.role === "ADMIN";
   var userEmail = (sessionCheck.emel || "").toLowerCase();
+  var emelKeNama = petaDataGuru().emelKeNama;
 
   for (var i = 1; i < data.length; i++) {
     var status = data[i][9].toString();
@@ -701,7 +745,8 @@ function handleGetLeaveApplications(payload, sessionCheck) {
 
     var item = {
       id: data[i][0].toString(), teacherName: data[i][1].toString(),
-      startDate: toYMD(data[i][4]), endDate: toYMD(data[i][5]), totalDays: parseInt(data[i][6], 10) || 0, status: status
+      startDate: toYMD(data[i][4]), endDate: toYMD(data[i][5]), totalDays: parseInt(data[i][6], 10) || 0, status: status,
+      guruData: emelKeNama[emelPemohon] || "" // nama dalam DATA_GURU, dipadankan ikut EMEL pemohon (untuk kiraan baki)
     };
 
     if (isAdmin || milikSendiri) {
