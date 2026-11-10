@@ -6,7 +6,8 @@ var SPREADSHEET_ID = ""; // <-- TAMPAL GOOGLE SHEET ID ANDA DI SINI
 var SESSION_TTL_HOURS = 12; 
 var MAX_LOGIN_ATTEMPTS = 8; 
 var RATE_LIMIT_MINUTES = 5; 
-var SERVER_VERSI = "2.3"; // dipapar di bawah halaman (index.html v2.1+). Naikkan bila Code.gs berubah.
+var PASSWORD_MIN = 8; // untuk kata laluan BAHARU; kata laluan lama yang lebih pendek masih boleh log masuk
+var SERVER_VERSI = "2.4"; // dipapar di bawah halaman (index.html v2.1+). Naikkan bila Code.gs berubah.
 
 function pastikanTab(namaTab, senaraiHeader) {
   var ss = SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
@@ -50,6 +51,31 @@ function hashPassword(password, userSalt) {
     hexString += byteHex;
   }
   return hexString;
+}
+
+// Rawak daripada UUID v4 (penjana rawak Google), bukan Math.random.
+function bytesRawak(n) {
+  var hex = "";
+  while (hex.length < n * 2) hex += Utilities.getUuid().replace(/-/g, "").replace(/^(.{12})4/, "$1").replace(/^(.{15})[89ab]/, "$1"); // buang digit versi/varian yang tetap
+  var out = [];
+  for (var i = 0; i < n; i++) out.push(parseInt(hex.substr(i * 2, 2), 16));
+  return out;
+}
+
+// Kata laluan sementara rawak: 10 aksara, tanpa aksara yang mengelirukan (0/O, 1/l/I)
+function janaKataLaluanSementara() {
+  var abjad = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"; // 56 aksara
+  var b = bytesRawak(20), out = "";
+  for (var i = 0; i < b.length && out.length < 10; i++) { if (b[i] < 224) out += abjad.charAt(b[i] % 56); } // 224 = 4 x 56, tiada berat sebelah
+  while (out.length < 10) out += abjad.charAt(bytesRawak(1)[0] % 56);
+  return out;
+}
+
+// Kod reset 6 digit (100000–999999)
+function janaKodReset() {
+  var b = bytesRawak(4);
+  var n = ((b[0] * 16777216) + (b[1] * 65536) + (b[2] * 256) + b[3]);
+  return (100000 + (n % 900000)).toString();
 }
 
 function sanitizeFormula(inputVal) {
@@ -138,7 +164,7 @@ function handleMintaKodReset(payload) {
   
   for (var i = 1; i < data.length; i++) {
     if (data[i][0].toString().toLowerCase() === emel && data[i][8] === "ACTIVE") {
-      var kodRawak = Math.floor(100000 + Math.random() * 900000).toString(); 
+      var kodRawak = janaKodReset();
       var hashedKod = hashPassword(kodRawak, data[i][4]); 
       var luput = new Date().getTime() + (15 * 60 * 1000); 
 
@@ -164,7 +190,7 @@ function handleSahkanKodReset(payload) {
   var kod = payload.kod || "";
   var newPassword = payload.newPassword || "";
   
-  if (!emel || !kod || newPassword.length < 6) return jsonResponse({ success: false, message: "Maklumat tidak lengkap atau kata laluan terlalu pendek." });
+  if (!emel || !kod || newPassword.length < PASSWORD_MIN) return jsonResponse({ success: false, message: "Maklumat tidak lengkap atau kata laluan terlalu pendek (minimum " + PASSWORD_MIN + " aksara)." });
 
   var cache = CacheService.getScriptCache();
   var attemptKey = "RESET_ATTEMPT_" + emel;
@@ -548,7 +574,7 @@ function handleLogout(payload) {
 
 function handleChangePassword(payload, sessionCheck) {
   var newP = payload.newPassword || "", oldP = payload.oldPassword || "";
-  if (newP.length < 6) return jsonResponse({ success: false, message: "Kata laluan baharu minimum 6 aksara." });
+  if (newP.length < PASSWORD_MIN) return jsonResponse({ success: false, message: "Kata laluan baharu minimum " + PASSWORD_MIN + " aksara." });
   if (!checkRateLimit(sessionCheck.emel)) return jsonResponse({ success: false, message: "Terlalu banyak percubaan. Sila tunggu 5 minit." });
 
   var u = cariPengguna(sessionCheck.emel);
@@ -569,7 +595,7 @@ function handleChangePassword(payload, sessionCheck) {
 
 function handleAddUser(payload, sessionCheck) {
   if (sessionCheck.role !== "ADMIN") return jsonResponse({ success: false, message: "Capaian ditolak." });
-  if (!payload.emel || !payload.nama || !payload.role || !payload.tempPassword) return jsonResponse({ success: false, message: "Sila isi semua maklumat." });
+  if (!payload.emel || !payload.nama || !payload.role) return jsonResponse({ success: false, message: "Sila isi semua maklumat." });
 
   var emelBaru = payload.emel.toLowerCase().trim();
   var role = payload.role.toString().toUpperCase().trim();
@@ -579,19 +605,23 @@ function handleAddUser(payload, sessionCheck) {
 
   var sheetUsers = pastikanTab("Users", HEADER_USERS);
   var salt = Utilities.getUuid();
-  sheetUsers.appendRow([sanitizeFormula(emelBaru), sanitizeFormula(payload.nama), role, hashPassword(payload.tempPassword, salt), salt, true, "", "", "ACTIVE", new Date()]);
+  var kataSementara = janaKataLaluanSementara(); // rawak bagi setiap pengguna (bukan satu kata laluan sama untuk semua)
+  sheetUsers.appendRow([sanitizeFormula(emelBaru), sanitizeFormula(payload.nama), role, hashPassword(kataSementara, salt), salt, true, "", "", "ACTIVE", new Date()]);
 
   try {
     MailApp.sendEmail(emelBaru, "[e-Cuti] Akaun Portal SMIAAG Telah Dicipta",
       "Salam sejahtera,\n\nAkaun portal e-Cuti SMIAAG anda telah didaftarkan dengan peranan " + role + ".\n\n" +
       "ID Log Masuk: " + emelBaru + "\n" +
-      "Kata Laluan Sementara: " + payload.tempPassword + "\n\n" +
+      "Kata Laluan Sementara: " + kataSementara + "\n\n" +
       "Sila log masuk ke portal dan ANDA DIWAJIBKAN menukar kata laluan pada log masuk pertama.\n\nTerima kasih."
     );
-  } catch(e) {}
+    var emelDihantar = true;
+  } catch(e) { emelDihantar = false; }
 
   logActivity(sessionCheck.emel, "TAMBAH_PENGGUNA", emelBaru);
-  return jsonResponse({ success: true, message: "Pengguna berjaya ditambah dan emel kata laluan sementara telah dihantar!" });
+  // Kata laluan sementara dipulangkan SEKALI kepada admin sebagai sandaran jika emel tidak sampai.
+  return jsonResponse({ success: true, tempPassword: kataSementara, emelDihantar: !!emelDihantar,
+    message: emelDihantar ? "Pengguna ditambah dan kata laluan sementara dihantar ke emel." : "Pengguna ditambah, tetapi emel GAGAL dihantar. Serahkan kata laluan sementara secara terus." });
 }
 
 function handleEditUser(payload, sessionCheck) {

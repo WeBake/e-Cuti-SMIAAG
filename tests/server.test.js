@@ -39,9 +39,9 @@ console.log('blocked',post({action:"GET_USERS",token:tok}).mustChangePassword);
 console.log('wrongold',post({action:"CHANGE_PASSWORD",token:tok,oldPassword:"x",newPassword:"Baru1234"}).message);
 console.log('chg',post({action:"CHANGE_PASSWORD",token:tok,oldPassword:"TukarSaya123",newPassword:"Baru1234"}).success);
 tok=post({action:"LOGIN",emel:"admin@smiaag.edu.my",password:"Baru1234"}).token;
-const guru=[];for(let i=0;i<4;i++){post({action:"ADD_USER",token:tok,emel:`g${i}@x.my`,nama:i?`Guru ${i}`:"Ali Bin Abu",role:"GURU",tempPassword:"TukarSaya123"});
- let t=post({action:"LOGIN",emel:`g${i}@x.my`,password:"TukarSaya123"}).token;post({action:"CHANGE_PASSWORD",token:t,oldPassword:"TukarSaya123",newPassword:"abcdef1"});
- guru.push(post({action:"LOGIN",emel:`g${i}@x.my`,password:"abcdef1"}).token);}
+const guru=[];for(let i=0;i<4;i++){const sem=post({action:"ADD_USER",token:tok,emel:`g${i}@x.my`,nama:i?`Guru ${i}`:"Ali Bin Abu",role:"GURU"}).tempPassword;
+ let t=post({action:"LOGIN",emel:`g${i}@x.my`,password:sem}).token;post({action:"CHANGE_PASSWORD",token:t,oldPassword:sem,newPassword:"abcdef12"});
+ guru.push(post({action:"LOGIN",emel:`g${i}@x.my`,password:"abcdef12"}).token);}
 console.log('public submit',post({action:"SUBMIT_LEAVE",application:{}}).message);
 const app=(s,e)=>({action:"SUBMIT_LEAVE",application:{startDate:s,endDate:e,reasonCategory:"Kursus / Bengkel",reasonDetails:"x",fileBase64:Buffer.from("PDF").toString('base64'),fileMimeType:"application/pdf",fileName:"a.pdf",relief:[{day:"Isnin",time:"8",class:"=cmd",replacement:"Guru 1"}]}});
 for(let i=0;i<4;i++){const t=post({...app("2026-11-09","2026-11-10"),token:guru[i]});console.log('sub',i,t.success,t.id||t.message)}
@@ -58,8 +58,9 @@ console.log('att other',post({action:"GET_ATTACHMENT",token:guru[1],appId:"CT-20
 let ad=post({action:"GET_LEAVE_APPLICATIONS",token:tok});console.log('admin row',JSON.stringify(ad.data[0]));
 console.log('dataguru guru',JSON.stringify(post({action:"GET_DATA_GURU",token:guru[0]}).data),JSON.stringify(post({action:"GET_DATA_GURU",token:guru[1]}).data));
 // role change invalidates
-post({action:"ADD_USER",token:tok,emel:"a2@x.my",nama:"A2",role:"ADMIN",tempPassword:"TukarSaya123"});
-let a2=post({action:"LOGIN",emel:"a2@x.my",password:"TukarSaya123"}).token;post({action:"CHANGE_PASSWORD",token:a2,oldPassword:"TukarSaya123",newPassword:"zzzzzz1"});a2=post({action:"LOGIN",emel:"a2@x.my",password:"zzzzzz1"}).token;
+const semA2=post({action:"ADD_USER",token:tok,emel:"a2@x.my",nama:"A2",role:"ADMIN"}).tempPassword;
+let a2=post({action:"LOGIN",emel:"a2@x.my",password:semA2}).token;post({action:"CHANGE_PASSWORD",token:a2,oldPassword:semA2,newPassword:"zzzzzz12"});a2=post({action:"LOGIN",emel:"a2@x.my",password:"zzzzzz12"}).token;
+if(post({action:"GET_USERS",token:a2}).success!==true)throw new Error('admin kedua sepatutnya boleh log masuk sebelum diturunkan');
 post({action:"EDIT_USER",token:tok,targetEmel:"a2@x.my",emel:"a2@x.my",nama:"A2",role:"GURU"});
 console.log('demoted',post({action:"GET_USERS",token:a2}).message);
 console.log('logout',post({action:"LOGOUT",token:guru[2]}).success,post({action:"GET_DATA_GURU",token:guru[2]}).message);

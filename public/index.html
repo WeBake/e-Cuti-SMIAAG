@@ -97,8 +97,8 @@
         <h3 class="text-lg font-extrabold text-slate-800">Tukar Kata Laluan Wajib</h3>
         <p class="text-xs text-slate-500 mb-5">Untuk keselamatan, anda wajib menukar kata laluan sementara sebelum menggunakan sistem.</p>
         <div class="space-y-3">
-          <input type="password" id="force-old-password" placeholder="Kata Laluan Sementara (cth: TukarSaya123)" class="w-full px-4 py-3 rounded-xl border text-xs focus:ring-2 outline-none">
-          <input type="password" id="force-new-password" placeholder="Kata Laluan Baharu (Min 6 aksara)" class="w-full px-4 py-3 rounded-xl border text-xs focus:ring-2 outline-none">
+          <input type="password" id="force-old-password" placeholder="Kata Laluan Sementara (daripada emel)" class="w-full px-4 py-3 rounded-xl border text-xs focus:ring-2 outline-none">
+          <input type="password" id="force-new-password" placeholder="Kata Laluan Baharu (Min 8 aksara)" class="w-full px-4 py-3 rounded-xl border text-xs focus:ring-2 outline-none">
           <button onclick="forceChangePassword()" class="w-full py-3 rounded-xl bg-amber-500 text-white font-bold text-xs shadow hover:bg-amber-600 transition-colors">Simpan Kata Laluan</button>
         </div>
       </div>
@@ -223,7 +223,7 @@
           <div id="forgot-step-2" class="hidden space-y-3 text-left">
             <p class="text-[10px] text-slate-500 text-center mb-4">Kod 6-digit telah dihantar ke emel anda (Sila semak Spam jika tiada). Kod sah selama 15 minit.</p>
             <input type="text" id="forgot-code" placeholder="Kod 6-Digit (Cth: 123456)" maxlength="6" class="w-full px-4 py-3 rounded-xl border text-xs font-mono text-center tracking-[0.5em] outline-none">
-            <input type="password" id="forgot-new-pass" placeholder="Kata Laluan Baharu" class="w-full px-4 py-3 rounded-xl border text-xs outline-none mt-2">
+            <input type="password" id="forgot-new-pass" placeholder="Kata Laluan Baharu (Min 8 aksara)" class="w-full px-4 py-3 rounded-xl border text-xs outline-none mt-2">
             <button onclick="confirmResetCode()" class="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-md mt-2 hover:bg-emerald-700 transition-colors">Sahkan & Tukar Password</button>
           </div>
         </div>
@@ -311,7 +311,7 @@
             <p class="text-[10px] text-slate-500 mb-4">Penukaran kata laluan akan memaksa log keluar automatik dari peranti lain.</p>
             <div class="flex flex-col sm:flex-row gap-3">
               <input type="password" id="setting-old-pass" placeholder="Kata Laluan Semasa" class="flex-1 px-4 py-2.5 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-indigo-100">
-              <input type="password" id="setting-new-pass" placeholder="Kata Laluan Baharu (Min 6 Aksara)" class="flex-1 px-4 py-2.5 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-indigo-100">
+              <input type="password" id="setting-new-pass" placeholder="Kata Laluan Baharu (Min 8 Aksara)" class="flex-1 px-4 py-2.5 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-indigo-100">
               <button onclick="changeOwnPassword()" class="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs shadow-sm hover:bg-indigo-700 transition-colors">Simpan Kata Laluan</button>
             </div>
           </div>
@@ -327,7 +327,7 @@
               <div class="flex-1 w-full"><label class="text-[10px] font-bold text-slate-500">Alamat Emel</label><input type="email" id="set-add-email" class="w-full px-3 py-2.5 rounded-lg border text-xs focus:ring-2 focus:ring-emerald-100 outline-none"></div>
               <div class="flex-1 w-full"><label class="text-[10px] font-bold text-slate-500">Nama Penuh</label><input type="text" id="set-add-nama" list="teacher-names-list" placeholder="Taip / pilih dari senarai" class="w-full px-3 py-2.5 rounded-lg border text-xs focus:ring-2 focus:ring-emerald-100 outline-none"></div>
               <div class="w-full md:w-32"><label class="text-[10px] font-bold text-slate-500">Peranan (Role)</label><select id="set-add-role" class="w-full px-3 py-2.5 rounded-lg border text-xs focus:ring-2 focus:ring-emerald-100 outline-none"><option value="GURU">GURU</option><option value="STAF">STAF</option><option value="ADMIN">ADMIN</option></select></div>
-              <div class="flex-1 w-full"><label class="text-[10px] font-bold text-slate-500">Kata Laluan Sementara</label><input type="text" id="set-add-pass" class="w-full px-3 py-2.5 rounded-lg border text-xs focus:ring-2 focus:ring-emerald-100 outline-none" value="TukarSaya123"></div>
+              <div class="flex-1 w-full"><label class="text-[10px] font-bold text-slate-500">Kata Laluan Sementara</label><p class="px-3 py-2.5 rounded-lg border border-dashed text-[11px] text-slate-500">Dijana rawak dan dihantar ke emel pengguna</p></div>
               <button onclick="addNewUser()" class="w-full md:w-auto px-5 py-2.5 bg-emerald-600 text-white font-bold text-xs rounded-lg whitespace-nowrap shadow-sm hover:bg-emerald-700 transition-colors">Tambah User</button>
             </div>
 
@@ -387,7 +387,7 @@
     const GAS_URL = "https://script.google.com/macros/s/AKfycbyIQ15mj6bJN1dbQ2HyZ-L03GlGqjd-xvaVwfhPB5HUp8MmLzDZZE0vNMsV6jarca90ZQ/exec";
     // ====================================================================
 
-    const VERSI_WEB = "v2.3"; // tukar bila index.html dikemas kini
+    const VERSI_WEB = "v2.4"; // tukar bila index.html dikemas kini
     const MAX_GURU_SEHARI = 3;
     const BULAN = ["Januari","Februari","Mac","April","Mei","Jun","Julai","Ogos","September","Oktober","November","Disember"];
 
@@ -688,7 +688,7 @@
 
     async function confirmResetCode() {
       const kod = document.getElementById('forgot-code').value, newP = document.getElementById('forgot-new-pass').value;
-      if (!kod || newP.length < 6) return showToast("Ralat", "Sila periksa format kod dan pastikan password minimum 6 aksara.", "error");
+      if (!kod || newP.length < 8) return showToast("Ralat", "Sila periksa format kod dan pastikan kata laluan minimum 8 aksara.", "error");
       showToast("Mengesahkan...", "Menukar kata laluan...", "info");
       const res = await apiPost({ action: "SAHKAN_KOD_RESET", emel: resetEmailCache, kod: kod, newPassword: newP });
       if (res.success) { showToast("Selesai", res.message, "success"); toggleAuthView('login'); }
@@ -713,7 +713,7 @@
 
     async function forceChangePassword() {
       const oldP = document.getElementById('force-old-password').value, newP = document.getElementById('force-new-password').value;
-      if (newP.length < 6) return showToast("Ralat", "Min 6 aksara", "error");
+      if (newP.length < 8) return showToast("Ralat", "Min 8 aksara", "error");
       showToast("Menyimpan...", "Menukar kata laluan wajib...", "info");
       const res = await apiPost({ action: "CHANGE_PASSWORD", oldPassword: oldP, newPassword: newP });
       if (res.success) {
@@ -777,7 +777,7 @@
     async function changeOwnPassword() {
       const oldP = document.getElementById('setting-old-pass').value, newP = document.getElementById('setting-new-pass').value;
       if (!oldP) return showToast("Ralat", "Masukkan kata laluan semasa", "error");
-      if (newP.length < 6) return showToast("Ralat", "Min 6 aksara", "error");
+      if (newP.length < 8) return showToast("Ralat", "Min 8 aksara", "error");
       const res = await apiPost({ action: "CHANGE_PASSWORD", oldPassword: oldP, newPassword: newP });
       if (res.success) { document.getElementById('setting-old-pass').value = ""; document.getElementById('setting-new-pass').value = ""; performLogout(false); showToast("Berjaya", res.message, "success"); }
       else showToast("Gagal", res.message, "error");
@@ -802,11 +802,14 @@
     }
 
     async function addNewUser() {
-      const e = document.getElementById('set-add-email').value, n = document.getElementById('set-add-nama').value, r = document.getElementById('set-add-role').value, p = document.getElementById('set-add-pass').value;
-      if (!e || !n || !p) return showToast("Ralat", "Lengkapkan semua", "error");
+      const e = document.getElementById('set-add-email').value, n = document.getElementById('set-add-nama').value, r = document.getElementById('set-add-role').value;
+      if (!e || !n) return showToast("Ralat", "Lengkapkan semua", "error");
       showToast("Menambah...", "Mendaftar dan menghantar emel pendaftaran...", "info");
-      const res = await apiPost({ action: "ADD_USER", emel: e, nama: n, role: r, tempPassword: p });
-      if (res.success) { showToast("Selesai", res.message, "success"); document.getElementById('set-add-email').value = ""; document.getElementById('set-add-nama').value = ""; loadUsersForAdmin(); }
+      const res = await apiPost({ action: "ADD_USER", emel: e, nama: n, role: r });
+      if (res.success) {
+        hideToast();
+        // Dipaparkan sekali sahaja sebagai sandaran jika emel tidak sampai
+        showConfirmModal(res.emelDihantar ? "Pengguna ditambah" : "Pengguna ditambah, emel GAGAL dihantar", `${res.message}\n\nKata laluan sementara ${e}:\n${res.tempPassword}\n\nIa tidak akan dipaparkan lagi. Pengguna wajib menukarnya semasa log masuk pertama.`, null); document.getElementById('set-add-email').value = ""; document.getElementById('set-add-nama').value = ""; loadUsersForAdmin(); }
       else showToast("Gagal", res.message, "error");
     }
 
