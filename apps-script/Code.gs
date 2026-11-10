@@ -9,9 +9,28 @@ var RATE_LIMIT_MINUTES = 5;
 var PASSWORD_MIN = 8; // untuk kata laluan BAHARU; kata laluan lama yang lebih pendek masih boleh log masuk
 var SERVER_VERSI = "2.4"; // dipapar di bawah halaman (index.html v2.1+). Naikkan bila Code.gs berubah.
 
-function pastikanTab(namaTab, senaraiHeader) {
-  var ss = SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+// Kelajuan: Spreadsheet dibuka sekali setiap larian; semakan tajuk tab dibuat sekali dan diingat 10 minit.
+var _SS = null, _TAB = {};
+function bukaSpreadsheet() {
+  if (!_SS) _SS = SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+  return _SS;
+}
+
+function pastikanTab(namaTab, senaraiHeader, semakSemula) {
+  var kunciTab = namaTab + "|" + senaraiHeader.join(",");
+  if (semakSemula) { delete _TAB[kunciTab]; CacheService.getScriptCache().remove("TAB_OK_" + namaTab + "_" + senaraiHeader.length); }
+  if (_TAB[kunciTab]) return _TAB[kunciTab];
+  var ss = bukaSpreadsheet();
   var sheet = ss.getSheetByName(namaTab);
+  var cache = CacheService.getScriptCache(), kunciCache = "TAB_OK_" + namaTab + "_" + senaraiHeader.length;
+  if (sheet && cache.get(kunciCache)) { _TAB[kunciTab] = sheet; return sheet; }
+  sheet = _pastikanTabPenuh(ss, sheet, namaTab, senaraiHeader);
+  cache.put(kunciCache, "1", 600);
+  _TAB[kunciTab] = sheet;
+  return sheet;
+}
+
+function _pastikanTabPenuh(ss, sheet, namaTab, senaraiHeader) {
 
   if (!sheet) {
     sheet = ss.insertSheet(namaTab);
@@ -105,20 +124,25 @@ function clearRateLimit(emel) {
   CacheService.getScriptCache().remove("LOGIN_ATTEMPTS_" + emel.toLowerCase());
 }
 
+// Sesi sah dicache 5 minit (kunci SESI_<token>) supaya tab Sessions tidak dibaca pada setiap permintaan.
+// Cache dibuang serta-merta bila sesi dipadam (log keluar, tukar kata laluan, tukar peranan, padam pengguna): lihat bersihkanSesi.
+var SESI_CACHE_SAAT = 300;
 function validateSession(token, requiredRole) {
-  if (!token) return { valid: false, error: "Token sesi tidak wujud." };
-  var sheetSessions = pastikanTab("Sessions", ["Token", "Emel", "Role", "ExpiryTimestamp"]);
-  var data = sheetSessions.getDataRange().getValues();
-  var now = new Date().getTime();
-
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === token) {
-      if (now > parseInt(data[i][3], 10)) return { valid: false, error: "Sesi telah tamat tempoh. Sila log masuk semula." };
-      if (requiredRole && data[i][2] !== requiredRole) return { valid: false, error: "Capaian ditolak. Kebenaran tidak mencukupi." };
-      return { valid: true, emel: data[i][1], role: data[i][2] };
+  if (!token || typeof token !== "string" || token.length > 120) return { valid: false, error: "Token sesi tidak wujud." };
+  var cache = CacheService.getScriptCache(), now = new Date().getTime(), s = null;
+  var c = cache.get("SESI_" + token);
+  if (c) { try { s = JSON.parse(c); } catch (e) { s = null; } }
+  if (!s) {
+    var data = pastikanTab("Sessions", HEADER_SESSIONS).getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][0] === token) { s = { emel: data[i][1], role: data[i][2], luput: parseInt(data[i][3], 10) }; break; }
     }
+    if (!s) return { valid: false, error: "Token sesi tidak sah." };
+    if (now <= s.luput) cache.put("SESI_" + token, JSON.stringify(s), SESI_CACHE_SAAT);
   }
-  return { valid: false, error: "Token sesi tidak sah." };
+  if (now > s.luput) { cache.remove("SESI_" + token); return { valid: false, error: "Sesi telah tamat tempoh. Sila log masuk semula." }; }
+  if (requiredRole && s.role !== requiredRole) return { valid: false, error: "Capaian ditolak. Kebenaran tidak mencukupi." };
+  return { valid: true, emel: s.emel, role: s.role };
 }
 
 function setupAdminPertama() {
@@ -406,9 +430,10 @@ function bersihkanSesi(tapis) {
   var sheet = pastikanTab("Sessions", HEADER_SESSIONS);
   var data = sheet.getDataRange().getValues();
   if (data.length <= 1) return;
-  var simpan = [data[0]];
-  for (var i = 1; i < data.length; i++) { if (!tapis(data[i])) simpan.push(data[i]); }
+  var simpan = [data[0]], dibuang = [];
+  for (var i = 1; i < data.length; i++) { if (!tapis(data[i])) simpan.push(data[i]); else dibuang.push("SESI_" + data[i][0]); }
   if (simpan.length === data.length) return;
+  CacheService.getScriptCache().removeAll(dibuang); // sesi yang dipadam tidak boleh terus hidup dalam cache
   sheet.getRange(1, 1, data.length, data[0].length).clearContent();
   sheet.getRange(1, 1, simpan.length, data[0].length).setValues(simpan);
 }
@@ -667,8 +692,8 @@ function handleEditUser(payload, sessionCheck) {
 // (abaikan huruf besar/kecil dan ruang berlebihan) selagi hanya SATU akaun aktif bernama begitu.
 function normNama(v) { return String(v === null || v === undefined ? "" : v).replace(/\s+/g, " ").trim().toUpperCase(); }
 
-function petaDataGuru() {
-  var sheet = pastikanTab("DATA_GURU", ["NAMA_GURU", "BIL_CUTI_TAHUNAN_BERBAKI", "EMEL"]);
+function petaDataGuru(semakSemula) {
+  var sheet = pastikanTab("DATA_GURU", ["NAMA_GURU", "BIL_CUTI_TAHUNAN_BERBAKI", "EMEL"], semakSemula);
   var data = sheet.getDataRange().getValues();
   var kepala = data[0].map(function(h) { return String(h).trim(); });
   var iNama = kepala.indexOf("NAMA_GURU"), iBil = kepala.indexOf("BIL_CUTI_TAHUNAN_BERBAKI"), iEmel = kepala.indexOf("EMEL");
@@ -711,7 +736,7 @@ function handleGetDataGuru(sessionCheck) {
  * Baris yang tidak dapat dipadankan disenaraikan dalam log untuk diisi secara manual.
  */
 function isiEmelDataGuru() {
-  var peta = petaDataGuru(), diisi = 0, tiada = [];
+  var peta = petaDataGuru(true), diisi = 0, tiada = [];
   peta.senarai.forEach(function(g) {
     if (g.padan === "NAMA") { peta.sheet.getRange(g.baris, peta.lajurEmel).setValue(sanitizeFormula(g.emel)); diisi++; }
     else if (!g.padan) tiada.push(g.nama);
