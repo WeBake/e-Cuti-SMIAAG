@@ -52,7 +52,8 @@ console.log('after unlimited',post({...app("2026-11-09","2026-11-10"),token:guru
 let g=post({action:"GET_LEAVE_APPLICATIONS",token:guru[1]});console.log('guru sees',g.data.map(a=>a.id+':'+a.status+':'+(a.teacherEmail||'-')),g.usage['2026-11-09']);
 const id0=g.data[0]?.id;
 console.log('approve',post({action:"APPROVE_LEAVE",token:tok,appId:"CT-2026-001",newStatus:"APPROVED"}).success, post({action:"APPROVE_LEAVE",token:tok,appId:"CT-2026-001",newStatus:"APPROVED"}).message);
-let pub=post({action:"GET_LEAVE_APPLICATIONS",token:"PUBLIC_GHOST"});console.log('public',JSON.stringify(pub.data));
+let pub=post({action:"GET_LEAVE_APPLICATIONS",token:"PUBLIC_GHOST"});console.log('public ditutup',pub.success,pub.message);if(pub.success||pub.data)throw new Error('laluan awam masih terbuka');
+if(post({action:"GET_LEAVE_APPLICATIONS"}).success)throw new Error('senarai cuti tanpa token');
 console.log('att other',post({action:"GET_ATTACHMENT",token:guru[1],appId:"CT-2026-001"}).message,'att own',post({action:"GET_ATTACHMENT",token:guru[0],appId:"CT-2026-001"}).base64);
 let ad=post({action:"GET_LEAVE_APPLICATIONS",token:tok});console.log('admin row',JSON.stringify(ad.data[0]));
 console.log('dataguru guru',JSON.stringify(post({action:"GET_DATA_GURU",token:guru[0]}).data),JSON.stringify(post({action:"GET_DATA_GURU",token:guru[1]}).data));
