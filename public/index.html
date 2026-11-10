@@ -124,6 +124,7 @@
       </div>
       <div class="glass-card rounded-2xl p-2 sm:p-5 border-0">
         <div class="grid grid-cols-7 gap-1 sm:gap-2 mb-2 text-center text-[9px] sm:text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b pb-2"><div class="text-rose-500">Ahd</div><div>Isn</div><div>Sel</div><div>Rab</div><div>Kha</div><div>Jum</div><div class="text-indigo-500">Sab</div></div>
+        <p id="kalendar-nota" class="hidden text-center text-xs text-slate-500 mb-3">Log masuk untuk melihat cuti yang diluluskan dalam kalendar.</p>
         <div id="calendar-grid" class="grid grid-cols-7 gap-1 sm:gap-2 w-full"></div>
       </div>
     </section>
@@ -386,7 +387,7 @@
     const GAS_URL = "https://script.google.com/macros/s/AKfycbyIQ15mj6bJN1dbQ2HyZ-L03GlGqjd-xvaVwfhPB5HUp8MmLzDZZE0vNMsV6jarca90ZQ/exec";
     // ====================================================================
 
-    const VERSI_WEB = "v2.2"; // tukar bila index.html dikemas kini
+    const VERSI_WEB = "v2.3"; // tukar bila index.html dikemas kini
     const MAX_GURU_SEHARI = 3;
     const BULAN = ["Januari","Februari","Mac","April","Mei","Jun","Julai","Ogos","September","Oktober","November","Disember"];
 
@@ -478,7 +479,9 @@
     // DATA
     // ====================================================================
     async function fetchPublicData() {
-      const pApps = apiPost({ action: "GET_LEAVE_APPLICATIONS", token: currentSessionToken || "PUBLIC_GHOST" });
+      // Tanpa log masuk: kalendar kosong (nama guru dan tarikh cuti hanya untuk pengguna yang log masuk)
+      const pApps = currentSessionToken ? apiPost({ action: "GET_LEAVE_APPLICATIONS" }) : Promise.resolve({ success: true, data: [], usage: {} });
+      const nota = document.getElementById('kalendar-nota'); if (nota) nota.classList.toggle('hidden', !!currentSessionToken);
       const pUnlim = apiPost({ action: "GET_UNLIMITED_DATES" });
       const [resApps, resUnlim] = await Promise.all([pApps, pUnlim]);
       if (resApps.success) { leaveApplications = resApps.data; quotaUsage = resApps.usage || {}; }

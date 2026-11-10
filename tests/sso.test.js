@@ -89,5 +89,5 @@ test('SSO_LOGIN: ditolak jika ECUTI_SSO_SECRET belum disediakan; log masuk biasa
 
 test('GET_UNLIMITED_DATES memulangkan versi server untuk label di bawah halaman', () => {
   const { post } = bina();
-  assert.equal(post({ action: 'GET_UNLIMITED_DATES' }).versi, '2.2');
+  assert.equal(post({ action: 'GET_UNLIMITED_DATES' }).versi, '2.3');
 });

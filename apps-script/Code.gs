@@ -6,7 +6,7 @@ var SPREADSHEET_ID = ""; // <-- TAMPAL GOOGLE SHEET ID ANDA DI SINI
 var SESSION_TTL_HOURS = 12; 
 var MAX_LOGIN_ATTEMPTS = 8; 
 var RATE_LIMIT_MINUTES = 5; 
-var SERVER_VERSI = "2.2"; // dipapar di bawah halaman (index.html v2.1+). Naikkan bila Code.gs berubah.
+var SERVER_VERSI = "2.3"; // dipapar di bawah halaman (index.html v2.1+). Naikkan bila Code.gs berubah.
 
 function pastikanTab(namaTab, senaraiHeader) {
   var ss = SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
@@ -417,9 +417,7 @@ function doPost(e) {
     if (payload.action === "MINTA_KOD_RESET") return handleMintaKodReset(payload);
     if (payload.action === "SAHKAN_KOD_RESET") return handleSahkanKodReset(payload);
     if (payload.action === "GET_UNLIMITED_DATES") return handleGetUnlimitedDates();
-    if (payload.action === "GET_LEAVE_APPLICATIONS" && payload.token === "PUBLIC_GHOST") {
-      return handleGetLeaveApplications(payload, { valid: true, role: "PUBLIC", emel: "" });
-    }
+    // Senarai cuti (nama guru + tarikh) TIDAK lagi boleh dibaca tanpa log masuk (laluan PUBLIC_GHOST ditutup v2.3).
 
     // 2. ACTION WAJIB TOKEN
     var sessionCheck = validateSession(payload.token);
