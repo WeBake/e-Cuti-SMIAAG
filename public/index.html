@@ -283,6 +283,7 @@
             <div class="flex flex-wrap gap-2 mb-4 text-xs font-bold">
               <button type="button" id="mode-TANPA_HAD" onclick="setQuotaMode('TANPA_HAD')" class="px-4 py-2 rounded-xl border">Kuota Tanpa Had</button>
               <button type="button" id="mode-SABTU" onclick="setQuotaMode('SABTU')" class="px-4 py-2 rounded-xl border">Sabtu Ada Program</button>
+              <button type="button" id="mode-CUTI" onclick="setQuotaMode('CUTI')" class="px-4 py-2 rounded-xl border">Cuti Umum / Sekolah</button>
             </div>
             <p id="quota-mode-help" class="text-[10px] text-slate-500 mb-4"></p>
             
@@ -290,6 +291,7 @@
               <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Tarikh Mula</label><input type="date" id="admin-unlim-start" class="px-3 py-2 rounded-xl text-xs outline-none border focus:ring-2"></div>
               <div class="self-end pb-2"><span class="text-xs font-bold text-slate-400">hingga</span></div>
               <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Tarikh Akhir (Pilihan)</label><input type="date" id="admin-unlim-end" class="px-3 py-2 rounded-xl text-xs outline-none border focus:ring-2"></div>
+              <div id="admin-cuti-nama-wrap" class="hidden"><label class="block text-[10px] font-bold text-slate-500 mb-1">Nama Cuti</label><input type="text" id="admin-cuti-nama" maxlength="80" placeholder="cth: Hari Kebangsaan" class="px-3 py-2 rounded-xl text-xs outline-none border focus:ring-2"></div>
               <div class="self-end"><button onclick="addUnlimitedBulk()" id="quota-bulk-btn" class="px-5 py-2 rounded-xl bg-purple-600 text-white text-xs font-bold hover:bg-purple-700 shadow-sm transition-colors">Set Kuota Tanpa Had</button></div>
             </div>
             
@@ -297,7 +299,7 @@
               <div class="flex items-center justify-between mb-4"><button onclick="changeQuotaMonth(-1)" class="p-2 bg-slate-100 rounded-lg hover:bg-slate-200"><i class="fa-solid fa-chevron-left text-xs"></i></button><h4 id="quota-calendar-title" class="font-bold text-sm text-slate-700">Bulan</h4><button onclick="changeQuotaMonth(1)" class="p-2 bg-slate-100 rounded-lg hover:bg-slate-200"><i class="fa-solid fa-chevron-right text-xs"></i></button></div>
               <div class="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400 mb-2 border-b pb-2"><div class="text-rose-500">Ahd</div><div>Isn</div><div>Sel</div><div>Rab</div><div>Kha</div><div>Jum</div><div class="text-indigo-500">Sab</div></div>
               <div id="quota-calendar-grid" class="grid grid-cols-7 gap-1 sm:gap-2"></div>
-              <div class="mt-4 flex items-center justify-center gap-4 text-[9px] font-bold text-slate-500"><div class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-purple-500"></span> Tanpa Had</div><div class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-amber-400"></span> Sabtu Program</div><div class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-slate-100 border"></span> Biasa (Max 3)</div></div>
+              <div class="mt-4 flex items-center justify-center gap-4 text-[9px] font-bold text-slate-500"><div class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-purple-500"></span> Tanpa Had</div><div class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-amber-400"></span> Sabtu Program</div><div class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-teal-500"></span> Cuti</div><div class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-slate-100 border"></span> Biasa (Max 3)</div></div>
             </div>
           </div>
         </div>
@@ -387,12 +389,14 @@
     const GAS_URL = "https://script.google.com/macros/s/AKfycbyIQ15mj6bJN1dbQ2HyZ-L03GlGqjd-xvaVwfhPB5HUp8MmLzDZZE0vNMsV6jarca90ZQ/exec";
     // ====================================================================
 
-    const VERSI_WEB = "v2.4"; // tukar bila index.html dikemas kini
+    const VERSI_WEB = "v2.5"; // tukar bila index.html dikemas kini
     const MAX_GURU_SEHARI = 3;
     const BULAN = ["Januari","Februari","Mac","April","Mei","Jun","Julai","Ogos","September","Oktober","November","Disember"];
 
     // STATE
     let teachersData = [], leaveApplications = [], unlimitedDates = [], sabtuProgram = [], quotaUsage = {}, usersCache = [];
+    let cutiDates = [], cutiNama = {}; // cuti umum / cuti sekolah: tarikh dan namanya
+    function setCuti(list) { cutiDates = (list || []).map(c => c.tarikh); cutiNama = {}; (list || []).forEach(c => { cutiNama[c.tarikh] = c.nama; }); }
     let quotaMode = 'TANPA_HAD';
     let currentCalendarDate = new Date(), quotaCalendarDate = new Date();
     currentCalendarDate.setDate(1); quotaCalendarDate.setDate(1);
@@ -485,7 +489,7 @@
       const pUnlim = apiPost({ action: "GET_UNLIMITED_DATES" });
       const [resApps, resUnlim] = await Promise.all([pApps, pUnlim]);
       if (resApps.success) { leaveApplications = resApps.data; quotaUsage = resApps.usage || {}; }
-      if (resUnlim.success) { unlimitedDates = resUnlim.data; sabtuProgram = resUnlim.sabtu || []; }
+      if (resUnlim.success) { unlimitedDates = resUnlim.data; sabtuProgram = resUnlim.sabtu || []; setCuti(resUnlim.cuti); }
       const cap = document.getElementById('versi-cap'); if (cap) cap.innerText = `Web ${VERSI_WEB} · Server: ${resUnlim.success ? (resUnlim.versi ? 'v' + resUnlim.versi : 'LAMA (belum dideploy versi baharu)') : 'tiada sambungan'}`;
       renderCalendar();
       updateFormInfo();
@@ -573,13 +577,15 @@
         const dayOfWeek = new Date(year, month, day).getDay(), yyyymmdd = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
         const approvedApps = leaveApplications.filter(a => a.status === 'APPROVED' && a.startDate <= yyyymmdd && a.endDate >= yyyymmdd);
         const isProgram = (dayOfWeek === 6 && sabtuProgram.includes(yyyymmdd));
-        const isSunday = (dayOfWeek === 0) || (dayOfWeek === 6 && !isProgram); // hari cuti (Ahad, dan Sabtu tanpa program)
+        const isCuti = cutiDates.includes(yyyymmdd); // cuti umum / cuti sekolah
+        const isSunday = isCuti || (dayOfWeek === 0) || (dayOfWeek === 6 && !isProgram); // bukan hari persekolahan
         const isUnlimited = unlimitedDates.includes(yyyymmdd);
         const count = quotaUsage[yyyymmdd] || 0; // lulus + dalam semakan
         const isFull = (!isUnlimited && count >= MAX_GURU_SEHARI);
 
         let headerHtml = `<div class="flex items-center justify-between"><span class="text-xs sm:text-sm font-black ${dayOfWeek===0?'text-rose-400':(dayOfWeek===6?'text-indigo-500':'text-slate-700')}">${day}</span>${isProgram?'<span class="hidden sm:inline px-1 rounded text-[8px] font-bold bg-amber-100 text-amber-700">Program</span>':''}`;
-        if (isSunday) headerHtml += `<span class="hidden sm:inline text-[9px] text-slate-400 font-bold">Cuti</span></div>`;
+        if (isCuti) headerHtml += `<span class="px-1 rounded text-[8px] sm:text-[9px] font-bold bg-teal-100 text-teal-700 truncate max-w-[70%]" title="${escapeHTML(cutiNama[yyyymmdd])}">${escapeHTML(cutiNama[yyyymmdd])}</span></div>`;
+        else if (isSunday) headerHtml += `<span class="hidden sm:inline text-[9px] text-slate-400 font-bold">Cuti</span></div>`;
         else if (isUnlimited) headerHtml += `<span class="px-1 py-0.5 rounded text-[8px] sm:text-[9px] font-bold bg-purple-100 text-purple-700">${count}/∞</span></div>`;
         else if (!isFull) headerHtml += `<span class="px-1 py-0.5 rounded text-[8px] sm:text-[9px] font-bold bg-emerald-100 text-emerald-700">${count}/${MAX_GURU_SEHARI}<span class="hidden sm:inline"> Diisi</span></span></div>`;
         else headerHtml += `<span class="px-1 py-0.5 rounded text-[8px] sm:text-[9px] font-bold bg-rose-100 text-rose-700">PENUH</span></div>`;
@@ -611,7 +617,7 @@
     function kiraHariBekerja(sVal, eVal) {
       let s = parseYMD(sVal), e = parseYMD(eVal), c = 0;
       if (e < s) return -1;
-      while (s <= e) { const d = s.getDay(); if ((d >= 1 && d <= 5) || (d === 6 && sabtuProgram.includes(ymdOf(s)))) c++; s.setDate(s.getDate() + 1); }
+      while (s <= e) { const d = s.getDay(), y = ymdOf(s); if (!cutiDates.includes(y) && ((d >= 1 && d <= 5) || (d === 6 && sabtuProgram.includes(y)))) c++; s.setDate(s.getDate() + 1); }
       return c;
     }
 
@@ -775,7 +781,7 @@
       if (sub === 'approvals') renderApprovalsList();
       if (sub === 'teachers') populateTeacherDropdowns();
       if (sub === 'analytics') initAnalytics();
-      if (sub === 'quota') { setQuotaMode(quotaMode); apiPost({ action: "GET_UNLIMITED_DATES" }).then(r => { if (r.success) { unlimitedDates = r.data; sabtuProgram = r.sabtu || []; } renderAdminQuotaCalendar(); }); }
+      if (sub === 'quota') { setQuotaMode(quotaMode); apiPost({ action: "GET_UNLIMITED_DATES" }).then(r => { if (r.success) { unlimitedDates = r.data; sabtuProgram = r.sabtu || []; setCuti(r.cuti); } renderAdminQuotaCalendar(); }); }
     }
 
     async function changeOwnPassword() {
@@ -949,39 +955,45 @@
       for (let i = 0; i < firstDay; i++) html += `<div class="p-2"></div>`;
       for (let day = 1; day <= daysInMonth; day++) {
         const yyyymmdd = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-        const isUnlimited = unlimitedDates.includes(yyyymmdd), isProgram = sabtuProgram.includes(yyyymmdd), dayOfWeek = new Date(year, month, day).getDay();
+        const isUnlimited = unlimitedDates.includes(yyyymmdd), isProgram = sabtuProgram.includes(yyyymmdd), isCuti = cutiDates.includes(yyyymmdd), dayOfWeek = new Date(year, month, day).getDay();
         const bolehKlik = quotaMode === 'SABTU' ? dayOfWeek === 6 : true;
         let bg = isUnlimited ? "bg-purple-500 text-white shadow-md border-purple-600" : (dayOfWeek===0 ? "bg-rose-50 text-rose-400" : (dayOfWeek===6 ? "bg-slate-50 text-indigo-500 hover:bg-purple-50" : "bg-white text-slate-600 hover:bg-purple-50"));
         if (isProgram) bg += " ring-2 ring-amber-400" + (isUnlimited ? "" : " !bg-amber-400 !text-white");
+        if (isCuti) bg = "bg-teal-500 text-white shadow-md border-teal-600";
         if (!bolehKlik) bg += " opacity-30 cursor-not-allowed";
-        html += `<button ${bolehKlik ? `onclick="toggleUnlimitedDate('${yyyymmdd}')"` : 'disabled'} class="p-3 sm:p-2 rounded-xl border text-xs font-black transition-all ${bg}">${day}</button>`;
+        html += `<button ${bolehKlik ? `onclick="toggleUnlimitedDate('${yyyymmdd}')"` : 'disabled'} ${isCuti ? `title="${escapeHTML(cutiNama[yyyymmdd])}"` : ''} class="p-3 sm:p-2 rounded-xl border text-xs font-black transition-all ${bg}">${day}</button>`;
       }
       grid.innerHTML = html;
     }
 
     function setQuotaMode(mode) {
       quotaMode = mode;
-      ['TANPA_HAD', 'SABTU'].forEach(m => {
+      const WARNA = { TANPA_HAD: 'bg-purple-600 text-white border-purple-600', SABTU: 'bg-amber-500 text-white border-amber-500', CUTI: 'bg-teal-600 text-white border-teal-600' };
+      ['TANPA_HAD', 'SABTU', 'CUTI'].forEach(m => {
         const b = document.getElementById(`mode-${m}`); if (!b) return;
-        b.className = `px-4 py-2 rounded-xl border ${m === mode ? (m === 'SABTU' ? 'bg-amber-500 text-white border-amber-500' : 'bg-purple-600 text-white border-purple-600') : 'bg-white text-slate-600'}`;
+        b.className = `px-4 py-2 rounded-xl border ${m === mode ? WARNA[m] : 'bg-white text-slate-600'}`;
       });
       document.getElementById('quota-mode-help').innerText = mode === 'SABTU'
         ? "Sabtu biasanya cuti. Tanda Sabtu yang ada program supaya guru boleh mohon cuti pada hari itu (kuota 3 orang terpakai)."
-        : "Lepaskan had maksimum 3 orang guru sehari pada tarikh terpilih.";
+        : mode === 'CUTI'
+          ? "Cuti umum dan cuti sekolah bukan hari persekolahan: tidak dikira sebagai hari cuti dan tidak boleh dimohon. Cuti KPM 2027 (Kumpulan B) sudah diisi; tambah cuti lain di sini (cth Hari Kebangsaan, cuti negeri, cuti peristiwa)."
+          : "Lepaskan had maksimum 3 orang guru sehari pada tarikh terpilih.";
+      document.getElementById('admin-cuti-nama-wrap').classList.toggle('hidden', mode !== 'CUTI');
       const btn = document.getElementById('quota-bulk-btn');
-      btn.innerText = mode === 'SABTU' ? 'Tanda Semua Sabtu Dalam Julat' : 'Set Kuota Tanpa Had';
-      btn.className = `px-5 py-2 rounded-xl text-white text-xs font-bold shadow-sm transition-colors ${mode === 'SABTU' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-purple-600 hover:bg-purple-700'}`;
+      btn.innerText = mode === 'SABTU' ? 'Tanda Semua Sabtu Dalam Julat' : mode === 'CUTI' ? 'Tanda Sebagai Cuti' : 'Set Kuota Tanpa Had';
+      btn.className = `px-5 py-2 rounded-xl text-white text-xs font-bold shadow-sm transition-colors ${mode === 'SABTU' ? 'bg-amber-500 hover:bg-amber-600' : mode === 'CUTI' ? 'bg-teal-600 hover:bg-teal-700' : 'bg-purple-600 hover:bg-purple-700'}`;
       renderAdminQuotaCalendar();
     }
 
-    function senaraiIkutMode() { return quotaMode === 'SABTU' ? sabtuProgram : unlimitedDates; }
+    function senaraiIkutMode() { return quotaMode === 'SABTU' ? sabtuProgram : quotaMode === 'CUTI' ? cutiDates : unlimitedDates; }
+    function namaCutiBaharu() { return (document.getElementById('admin-cuti-nama').value || '').trim() || 'Cuti tambahan'; }
 
     async function toggleUnlimitedDate(dateStr) {
       const list = senaraiIkutMode(), ada = list.includes(dateStr);
       showToast("Menyimpan...", "Mengemaskini status tarikh", "info");
-      const res = await apiPost(ada ? { action: "REMOVE_UNLIMITED_DATE", jenis: quotaMode, date: dateStr } : { action: "ADD_UNLIMITED_DATE", jenis: quotaMode, dates: [dateStr] });
+      const res = await apiPost(ada ? { action: "REMOVE_UNLIMITED_DATE", jenis: quotaMode, date: dateStr } : { action: "ADD_UNLIMITED_DATE", jenis: quotaMode, dates: [dateStr], nama: namaCutiBaharu() });
       if (res.success) {
-        if (ada) list.splice(list.indexOf(dateStr), 1); else list.push(dateStr);
+        if (ada) list.splice(list.indexOf(dateStr), 1); else { list.push(dateStr); if (quotaMode === 'CUTI') cutiNama[dateStr] = namaCutiBaharu(); }
         renderAdminQuotaCalendar(); fetchPublicData(); hideToast();
       } else showToast("Gagal", res.message, "error");
     }
@@ -994,8 +1006,8 @@
       while (curr <= end) { const d = ymdOf(curr); if (!list.includes(d) && (quotaMode !== 'SABTU' || curr.getDay() === 6)) dates.push(d); curr.setDate(curr.getDate() + 1); }
       if (dates.length === 0) return showToast("Tiada Perubahan", quotaMode === 'SABTU' ? "Tiada Sabtu baharu dalam julat ini." : "Semua tarikh dalam julat sudah ditetapkan.", "info");
       showToast("Memproses...", "Mengeset pukal ke sistem...", "info");
-      const res = await apiPost({ action: "ADD_UNLIMITED_DATE", jenis: quotaMode, dates: dates });
-      if (res.success) { list.push(...(res.added || dates)); renderAdminQuotaCalendar(); fetchPublicData(); document.getElementById('admin-unlim-start').value = ""; document.getElementById('admin-unlim-end').value = ""; hideToast(); }
+      const res = await apiPost({ action: "ADD_UNLIMITED_DATE", jenis: quotaMode, dates: dates, nama: namaCutiBaharu() });
+      if (res.success) { list.push(...(res.added || dates)); if (quotaMode === 'CUTI') (res.added || dates).forEach(d => { cutiNama[d] = namaCutiBaharu(); }); renderAdminQuotaCalendar(); fetchPublicData(); document.getElementById('admin-unlim-start').value = ""; document.getElementById('admin-unlim-end').value = ""; hideToast(); }
       else showToast("Gagal", res.message, "error");
     }
 

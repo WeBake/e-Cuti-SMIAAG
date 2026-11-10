@@ -7,7 +7,7 @@ var SESSION_TTL_HOURS = 12;
 var MAX_LOGIN_ATTEMPTS = 8; 
 var RATE_LIMIT_MINUTES = 5; 
 var PASSWORD_MIN = 8; // untuk kata laluan BAHARU; kata laluan lama yang lebih pendek masih boleh log masuk
-var SERVER_VERSI = "2.4"; // dipapar di bawah halaman (index.html v2.1+). Naikkan bila Code.gs berubah.
+var SERVER_VERSI = "2.5"; // dipapar di bawah halaman (index.html v2.1+). Naikkan bila Code.gs berubah.
 
 // Kelajuan: Spreadsheet dibuka sekali setiap larian; semakan tajuk tab dibuat sekali dan diingat 10 minit.
 var _SS = null, _TAB = {};
@@ -348,11 +348,69 @@ function cariPengguna(emel) {
 }
 
 // Senarai tarikh khas: TANPA_HAD (kuota dilepaskan) dan SABTU (Sabtu yang ada program = hari bekerja)
-var TAB_TARIKH = { TANPA_HAD: "TarikhTanpaHad", SABTU: "SabtuProgram" };
-function jenisTarikh(payload) { return payload.jenis === "SABTU" ? "SABTU" : "TANPA_HAD"; }
+// CUTI = cuti umum / cuti sekolah (bukan hari persekolahan: tidak dikira sebagai hari cuti dan tidak boleh dimohon)
+var TAB_TARIKH = { TANPA_HAD: "TarikhTanpaHad", SABTU: "SabtuProgram", CUTI: "CutiSekolah" };
+var HEADER_TARIKH = { TANPA_HAD: ["Tarikh"], SABTU: ["Tarikh"], CUTI: ["Tarikh", "Nama"] };
+function jenisTarikh(payload) { return payload.jenis === "SABTU" ? "SABTU" : (payload.jenis === "CUTI" ? "CUTI" : "TANPA_HAD"); }
+
+// Kalendar Akademik 2027, Kumpulan B (termasuk Selangor), daripada pekeliling KPM (Lampiran B dan C).
+// Diisi automatik SEKALI ke tab CutiSekolah. Cuti umum lain (contoh Hari Pekerja, Hari Kebangsaan, cuti negeri)
+// TIADA dalam pekeliling itu dan ditambah oleh admin melalui Tetapan Tarikh Khas > Cuti Umum / Sekolah.
+var CUTI_KPM_2027_B = [
+  ["2027-02-05", "2027-02-05", "Tahun Baharu Cina (cuti tambahan KPM)"],
+  ["2027-02-06", "2027-02-07", "Tahun Baharu Cina"],
+  ["2027-02-09", "2027-02-12", "Tahun Baharu Cina (cuti tambahan KPM)"],
+  ["2027-03-06", "2027-03-14", "Cuti Penggal 1"],
+  ["2027-05-17", "2027-05-17", "Hari Raya Korban"],
+  ["2027-05-18", "2027-05-19", "Hari Raya Korban (cuti tambahan KPM)"],
+  ["2027-05-20", "2027-05-20", "Hari Wesak"],
+  ["2027-05-21", "2027-05-21", "Hari Wesak (cuti tambahan KPM)"],
+  ["2027-05-22", "2027-06-06", "Cuti Pertengahan Tahun"],
+  ["2027-08-28", "2027-09-05", "Cuti Penggal 2"],
+  ["2027-10-27", "2027-10-27", "Hari Deepavali (cuti tambahan KPM)"],
+  ["2027-10-28", "2027-10-28", "Hari Deepavali"],
+  ["2027-10-29", "2027-10-29", "Hari Deepavali (cuti tambahan KPM)"],
+  ["2027-12-04", "2027-12-31", "Cuti Akhir Persekolahan"]
+];
+
+function julatKeTarikh(mula, akhir) {
+  var a = mula.split("-"), b = akhir.split("-"), out = [];
+  var cur = Date.UTC(+a[0], +a[1] - 1, +a[2]), end = Date.UTC(+b[0], +b[1] - 1, +b[2]);
+  while (cur <= end) { out.push(Utilities.formatDate(new Date(cur), "UTC", "yyyy-MM-dd")); cur += 86400000; }
+  return out;
+}
+
+// Isi cuti KPM 2027 sekali sahaja (ditanda dalam Script Properties supaya tidak diisi semula jika admin memadamnya).
+function isiCutiKpmSekali(sheet) {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty("CUTI_KPM_2027_B_DIISI")) return;
+  var sedia = {};
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) { var v = toYMD(data[i][0]); if (v) sedia[v] = true; }
+  var baris = [];
+  CUTI_KPM_2027_B.forEach(function(c) {
+    julatKeTarikh(c[0], c[1]).forEach(function(d) { if (!sedia[d]) { sedia[d] = true; baris.push(["'" + d, c[2]]); } });
+  });
+  if (baris.length) sheet.getRange(sheet.getLastRow() + 1, 1, baris.length, 2).setValues(baris);
+  props.setProperty("CUTI_KPM_2027_B_DIISI", new Date().toISOString());
+}
+
+// Senarai cuti umum/sekolah: [{ tarikh: "yyyy-MM-dd", nama }]
+var _CUTI_MEMO = null; // sekali setiap larian; dikosongkan bila senarai diubah
+function getCutiList() {
+  if (_CUTI_MEMO) return _CUTI_MEMO;
+  var sheet = pastikanTab(TAB_TARIKH.CUTI, HEADER_TARIKH.CUTI);
+  isiCutiKpmSekali(sheet);
+  var data = sheet.getDataRange().getValues(), out = [];
+  for (var i = 1; i < data.length; i++) { var v = toYMD(data[i][0]); if (v) out.push({ tarikh: v, nama: (data[i][1] || "Cuti").toString() }); }
+  _CUTI_MEMO = out;
+  return out;
+}
+function getCutiTarikh() { return getCutiList().map(function(c) { return c.tarikh; }); }
 
 function getTarikhList(jenis) {
-  var data = pastikanTab(TAB_TARIKH[jenis], ["Tarikh"]).getDataRange().getValues();
+  if (jenis === "CUTI") return getCutiTarikh();
+  var data = pastikanTab(TAB_TARIKH[jenis], HEADER_TARIKH[jenis]).getDataRange().getValues();
   var out = [];
   for (var i = 1; i < data.length; i++) { var v = toYMD(data[i][0]); if (v) out.push(v); }
   return out;
@@ -360,15 +418,19 @@ function getTarikhList(jenis) {
 function getTarikhTanpaHadList() { return getTarikhList("TANPA_HAD"); }
 
 // Hari persekolahan antara dua tarikh: Isnin–Jumaat, + Sabtu yang ditanda program. Ahad sentiasa dikecualikan.
+// Cuti umum/sekolah (tab CutiSekolah) dikecualikan, termasuk jika jatuh pada Sabtu program.
 // Kira dalam UTC supaya tak lari zon masa.
-function senaraiHariBekerja(mula, akhir, sabtuProgram) {
+function senaraiHariBekerja(mula, akhir, sabtuProgram, cuti) {
   sabtuProgram = sabtuProgram || [];
+  var setCuti = {};
+  (cuti === undefined ? getCutiTarikh() : cuti).forEach(function(d) { setCuti[d] = true; });
   var a = mula.split("-"), b = akhir.split("-");
   var cur = Date.UTC(+a[0], +a[1] - 1, +a[2]), end = Date.UTC(+b[0], +b[1] - 1, +b[2]);
   var out = [];
   while (cur <= end) {
     var d = new Date(cur), ymd = Utilities.formatDate(d, "UTC", "yyyy-MM-dd"), hari = d.getUTCDay();
-    if (hari >= 1 && hari <= 5) out.push(ymd);
+    if (setCuti[ymd]) { /* cuti umum / cuti sekolah */ }
+    else if (hari >= 1 && hari <= 5) out.push(ymd);
     else if (hari === 6 && sabtuProgram.indexOf(ymd) > -1) out.push(ymd);
     cur += 86400000;
   }
@@ -377,19 +439,19 @@ function senaraiHariBekerja(mula, akhir, sabtuProgram) {
 
 // Kiraan penggunaan kuota sehari (APPROVED + PENDING)
 function kiraPenggunaanKuota(dataCuti, sabtuProgram) {
-  var usage = {};
+  var usage = {}, cuti = getCutiTarikh();
   for (var i = 1; i < dataCuti.length; i++) {
     var st = dataCuti[i][9].toString();
     if (st !== "APPROVED" && st !== "PENDING") continue;
     var m = toYMD(dataCuti[i][4]), a = toYMD(dataCuti[i][5]);
     if (!isValidYMD(m) || !isValidYMD(a)) continue;
-    senaraiHariBekerja(m, a, sabtuProgram).forEach(function(d) { usage[d] = (usage[d] || 0) + 1; });
+    senaraiHariBekerja(m, a, sabtuProgram, cuti).forEach(function(d) { usage[d] = (usage[d] || 0) + 1; });
   }
   return usage;
 }
 
 function handleGetUnlimitedDates() {
-  return jsonResponse({ success: true, data: getTarikhList("TANPA_HAD"), sabtu: getTarikhList("SABTU"), versi: SERVER_VERSI });
+  return jsonResponse({ success: true, data: getTarikhList("TANPA_HAD"), sabtu: getTarikhList("SABTU"), cuti: getCutiList(), versi: SERVER_VERSI });
 }
 
 function handleAddUnlimitedDate(payload, sessionCheck) {
@@ -401,24 +463,32 @@ function handleAddUnlimitedDate(payload, sessionCheck) {
   if (jenis === "SABTU") dates = dates.filter(function(d) { var p = d.split("-"); return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay() === 6; });
   if (dates.length === 0) return jsonResponse({ success: false, message: jenis === "SABTU" ? "Tiada hari Sabtu dalam pilihan." : "Tiada tarikh sah" });
 
+  if (dates.length > 400) return jsonResponse({ success: false, message: "Julat terlalu panjang (maksimum 400 hari)." });
   var sedia = getTarikhList(jenis);
   var baru = dates.filter(function(d, idx) { return sedia.indexOf(d) === -1 && dates.indexOf(d) === idx; });
   if (baru.length > 0) {
-    var sheet = pastikanTab(TAB_TARIKH[jenis], ["Tarikh"]);
-    sheet.getRange(sheet.getLastRow() + 1, 1, baru.length, 1).setValues(baru.map(function(d) { return ["'" + d]; }));
+    var sheet = pastikanTab(TAB_TARIKH[jenis], HEADER_TARIKH[jenis]);
+    if (jenis === "CUTI") {
+      var nama = sanitizeFormula((payload.nama || "").toString().trim().substring(0, 80)) || "Cuti tambahan";
+      sheet.getRange(sheet.getLastRow() + 1, 1, baru.length, 2).setValues(baru.map(function(d) { return ["'" + d, nama]; }));
+    } else {
+      sheet.getRange(sheet.getLastRow() + 1, 1, baru.length, 1).setValues(baru.map(function(d) { return ["'" + d]; }));
+    }
   }
-  logActivity(sessionCheck.emel, "TAMBAH_" + jenis, baru.join(","));
+  _CUTI_MEMO = null;
+  logActivity(sessionCheck.emel, "TAMBAH_" + jenis, baru.length > 20 ? baru[0] + " .. " + baru[baru.length - 1] + " (" + baru.length + " hari)" : baru.join(","));
   return jsonResponse({ success: true, message: "Tarikh ditambah", added: baru });
 }
 
 function handleRemoveUnlimitedDate(payload, sessionCheck) {
   if (sessionCheck.role !== "ADMIN") return jsonResponse({ success: false, message: "Ditolak" });
   var jenis = jenisTarikh(payload);
-  var sheet = pastikanTab(TAB_TARIKH[jenis], ["Tarikh"]);
+  var sheet = pastikanTab(TAB_TARIKH[jenis], HEADER_TARIKH[jenis]);
   var data = sheet.getDataRange().getValues();
   for (var i = data.length - 1; i >= 1; i--) {
     if (toYMD(data[i][0]) === payload.date) {
       sheet.deleteRow(i + 1);
+      _CUTI_MEMO = null;
       logActivity(sessionCheck.emel, "BUANG_" + jenis, payload.date);
       return jsonResponse({ success: true, message: "Dibuang" });
     }
@@ -827,7 +897,7 @@ function handleSubmitLeave(payload, sessionCheck) {
 
   var sabtuProgram = getTarikhList("SABTU");
   var hari = senaraiHariBekerja(mula, akhir, sabtuProgram);
-  if (hari.length === 0) return jsonResponse({ success: false, message: "Tiada hari persekolahan dalam julat ini (Sabtu & Ahad cuti, kecuali Sabtu yang ada program)." });
+  if (hari.length === 0) return jsonResponse({ success: false, message: "Tiada hari persekolahan dalam julat ini (Sabtu, Ahad dan cuti umum/sekolah tidak dikira, kecuali Sabtu yang ada program)." });
   if (hari.length > 60) return jsonResponse({ success: false, message: "Julat cuti terlalu panjang (maksimum 60 hari)." });
 
   if (!app.fileBase64) return jsonResponse({ success: false, message: "Lampiran surat rasmi adalah wajib." });
