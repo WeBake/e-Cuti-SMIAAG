@@ -6,11 +6,31 @@ var SPREADSHEET_ID = ""; // <-- TAMPAL GOOGLE SHEET ID ANDA DI SINI
 var SESSION_TTL_HOURS = 12; 
 var MAX_LOGIN_ATTEMPTS = 8; 
 var RATE_LIMIT_MINUTES = 5; 
-var SERVER_VERSI = "2.3"; // dipapar di bawah halaman (index.html v2.1+). Naikkan bila Code.gs berubah.
+var PASSWORD_MIN = 8; // untuk kata laluan BAHARU; kata laluan lama yang lebih pendek masih boleh log masuk
+var SERVER_VERSI = "2.6"; // dipapar di bawah halaman (index.html v2.1+). Naikkan bila Code.gs berubah.
 
-function pastikanTab(namaTab, senaraiHeader) {
-  var ss = SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+// Kelajuan: Spreadsheet dibuka sekali setiap larian; semakan tajuk tab dibuat sekali dan diingat 10 minit.
+var _SS = null, _TAB = {};
+function bukaSpreadsheet() {
+  if (!_SS) _SS = SPREADSHEET_ID ? SpreadsheetApp.openById(SPREADSHEET_ID) : SpreadsheetApp.getActiveSpreadsheet();
+  return _SS;
+}
+
+function pastikanTab(namaTab, senaraiHeader, semakSemula) {
+  var kunciTab = namaTab + "|" + senaraiHeader.join(",");
+  if (semakSemula) { delete _TAB[kunciTab]; CacheService.getScriptCache().remove("TAB_OK_" + namaTab + "_" + senaraiHeader.length); }
+  if (_TAB[kunciTab]) return _TAB[kunciTab];
+  var ss = bukaSpreadsheet();
   var sheet = ss.getSheetByName(namaTab);
+  var cache = CacheService.getScriptCache(), kunciCache = "TAB_OK_" + namaTab + "_" + senaraiHeader.length;
+  if (sheet && cache.get(kunciCache)) { _TAB[kunciTab] = sheet; return sheet; }
+  sheet = _pastikanTabPenuh(ss, sheet, namaTab, senaraiHeader);
+  cache.put(kunciCache, "1", 600);
+  _TAB[kunciTab] = sheet;
+  return sheet;
+}
+
+function _pastikanTabPenuh(ss, sheet, namaTab, senaraiHeader) {
 
   if (!sheet) {
     sheet = ss.insertSheet(namaTab);
@@ -52,6 +72,31 @@ function hashPassword(password, userSalt) {
   return hexString;
 }
 
+// Rawak daripada UUID v4 (penjana rawak Google), bukan Math.random.
+function bytesRawak(n) {
+  var hex = "";
+  while (hex.length < n * 2) hex += Utilities.getUuid().replace(/-/g, "").replace(/^(.{12})4/, "$1").replace(/^(.{15})[89ab]/, "$1"); // buang digit versi/varian yang tetap
+  var out = [];
+  for (var i = 0; i < n; i++) out.push(parseInt(hex.substr(i * 2, 2), 16));
+  return out;
+}
+
+// Kata laluan sementara rawak: 10 aksara, tanpa aksara yang mengelirukan (0/O, 1/l/I)
+function janaKataLaluanSementara() {
+  var abjad = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"; // 56 aksara
+  var b = bytesRawak(20), out = "";
+  for (var i = 0; i < b.length && out.length < 10; i++) { if (b[i] < 224) out += abjad.charAt(b[i] % 56); } // 224 = 4 x 56, tiada berat sebelah
+  while (out.length < 10) out += abjad.charAt(bytesRawak(1)[0] % 56);
+  return out;
+}
+
+// Kod reset 6 digit (100000–999999)
+function janaKodReset() {
+  var b = bytesRawak(4);
+  var n = ((b[0] * 16777216) + (b[1] * 65536) + (b[2] * 256) + b[3]);
+  return (100000 + (n % 900000)).toString();
+}
+
 function sanitizeFormula(inputVal) {
   if (typeof inputVal !== "string") return inputVal;
   var trimmed = inputVal.trim();
@@ -79,20 +124,25 @@ function clearRateLimit(emel) {
   CacheService.getScriptCache().remove("LOGIN_ATTEMPTS_" + emel.toLowerCase());
 }
 
+// Sesi sah dicache 5 minit (kunci SESI_<token>) supaya tab Sessions tidak dibaca pada setiap permintaan.
+// Cache dibuang serta-merta bila sesi dipadam (log keluar, tukar kata laluan, tukar peranan, padam pengguna): lihat bersihkanSesi.
+var SESI_CACHE_SAAT = 300;
 function validateSession(token, requiredRole) {
-  if (!token) return { valid: false, error: "Token sesi tidak wujud." };
-  var sheetSessions = pastikanTab("Sessions", ["Token", "Emel", "Role", "ExpiryTimestamp"]);
-  var data = sheetSessions.getDataRange().getValues();
-  var now = new Date().getTime();
-
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][0] === token) {
-      if (now > parseInt(data[i][3], 10)) return { valid: false, error: "Sesi telah tamat tempoh. Sila log masuk semula." };
-      if (requiredRole && data[i][2] !== requiredRole) return { valid: false, error: "Capaian ditolak. Kebenaran tidak mencukupi." };
-      return { valid: true, emel: data[i][1], role: data[i][2] };
+  if (!token || typeof token !== "string" || token.length > 120) return { valid: false, error: "Token sesi tidak wujud." };
+  var cache = CacheService.getScriptCache(), now = new Date().getTime(), s = null;
+  var c = cache.get("SESI_" + token);
+  if (c) { try { s = JSON.parse(c); } catch (e) { s = null; } }
+  if (!s) {
+    var data = pastikanTab("Sessions", HEADER_SESSIONS).getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][0] === token) { s = { emel: data[i][1], role: data[i][2], luput: parseInt(data[i][3], 10) }; break; }
     }
+    if (!s) return { valid: false, error: "Token sesi tidak sah." };
+    if (now <= s.luput) cache.put("SESI_" + token, JSON.stringify(s), SESI_CACHE_SAAT);
   }
-  return { valid: false, error: "Token sesi tidak sah." };
+  if (now > s.luput) { cache.remove("SESI_" + token); return { valid: false, error: "Sesi telah tamat tempoh. Sila log masuk semula." }; }
+  if (requiredRole && s.role !== requiredRole) return { valid: false, error: "Capaian ditolak. Kebenaran tidak mencukupi." };
+  return { valid: true, emel: s.emel, role: s.role };
 }
 
 function setupAdminPertama() {
@@ -138,7 +188,7 @@ function handleMintaKodReset(payload) {
   
   for (var i = 1; i < data.length; i++) {
     if (data[i][0].toString().toLowerCase() === emel && data[i][8] === "ACTIVE") {
-      var kodRawak = Math.floor(100000 + Math.random() * 900000).toString(); 
+      var kodRawak = janaKodReset();
       var hashedKod = hashPassword(kodRawak, data[i][4]); 
       var luput = new Date().getTime() + (15 * 60 * 1000); 
 
@@ -164,7 +214,7 @@ function handleSahkanKodReset(payload) {
   var kod = payload.kod || "";
   var newPassword = payload.newPassword || "";
   
-  if (!emel || !kod || newPassword.length < 6) return jsonResponse({ success: false, message: "Maklumat tidak lengkap atau kata laluan terlalu pendek." });
+  if (!emel || !kod || newPassword.length < PASSWORD_MIN) return jsonResponse({ success: false, message: "Maklumat tidak lengkap atau kata laluan terlalu pendek (minimum " + PASSWORD_MIN + " aksara)." });
 
   var cache = CacheService.getScriptCache();
   var attemptKey = "RESET_ATTEMPT_" + emel;
@@ -298,11 +348,69 @@ function cariPengguna(emel) {
 }
 
 // Senarai tarikh khas: TANPA_HAD (kuota dilepaskan) dan SABTU (Sabtu yang ada program = hari bekerja)
-var TAB_TARIKH = { TANPA_HAD: "TarikhTanpaHad", SABTU: "SabtuProgram" };
-function jenisTarikh(payload) { return payload.jenis === "SABTU" ? "SABTU" : "TANPA_HAD"; }
+// CUTI = cuti umum / cuti sekolah (bukan hari persekolahan: tidak dikira sebagai hari cuti dan tidak boleh dimohon)
+var TAB_TARIKH = { TANPA_HAD: "TarikhTanpaHad", SABTU: "SabtuProgram", CUTI: "CutiSekolah" };
+var HEADER_TARIKH = { TANPA_HAD: ["Tarikh"], SABTU: ["Tarikh"], CUTI: ["Tarikh", "Nama"] };
+function jenisTarikh(payload) { return payload.jenis === "SABTU" ? "SABTU" : (payload.jenis === "CUTI" ? "CUTI" : "TANPA_HAD"); }
+
+// Kalendar Akademik 2027, Kumpulan B (termasuk Selangor), daripada pekeliling KPM (Lampiran B dan C).
+// Diisi automatik SEKALI ke tab CutiSekolah. Cuti umum lain (contoh Hari Pekerja, Hari Kebangsaan, cuti negeri)
+// TIADA dalam pekeliling itu dan ditambah oleh admin melalui Tetapan Tarikh Khas > Cuti Umum / Sekolah.
+var CUTI_KPM_2027_B = [
+  ["2027-02-05", "2027-02-05", "Tahun Baharu Cina (cuti tambahan KPM)"],
+  ["2027-02-06", "2027-02-07", "Tahun Baharu Cina"],
+  ["2027-02-09", "2027-02-12", "Tahun Baharu Cina (cuti tambahan KPM)"],
+  ["2027-03-06", "2027-03-14", "Cuti Penggal 1"],
+  ["2027-05-17", "2027-05-17", "Hari Raya Korban"],
+  ["2027-05-18", "2027-05-19", "Hari Raya Korban (cuti tambahan KPM)"],
+  ["2027-05-20", "2027-05-20", "Hari Wesak"],
+  ["2027-05-21", "2027-05-21", "Hari Wesak (cuti tambahan KPM)"],
+  ["2027-05-22", "2027-06-06", "Cuti Pertengahan Tahun"],
+  ["2027-08-28", "2027-09-05", "Cuti Penggal 2"],
+  ["2027-10-27", "2027-10-27", "Hari Deepavali (cuti tambahan KPM)"],
+  ["2027-10-28", "2027-10-28", "Hari Deepavali"],
+  ["2027-10-29", "2027-10-29", "Hari Deepavali (cuti tambahan KPM)"],
+  ["2027-12-04", "2027-12-31", "Cuti Akhir Persekolahan"]
+];
+
+function julatKeTarikh(mula, akhir) {
+  var a = mula.split("-"), b = akhir.split("-"), out = [];
+  var cur = Date.UTC(+a[0], +a[1] - 1, +a[2]), end = Date.UTC(+b[0], +b[1] - 1, +b[2]);
+  while (cur <= end) { out.push(Utilities.formatDate(new Date(cur), "UTC", "yyyy-MM-dd")); cur += 86400000; }
+  return out;
+}
+
+// Isi cuti KPM 2027 sekali sahaja (ditanda dalam Script Properties supaya tidak diisi semula jika admin memadamnya).
+function isiCutiKpmSekali(sheet) {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty("CUTI_KPM_2027_B_DIISI")) return;
+  var sedia = {};
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) { var v = toYMD(data[i][0]); if (v) sedia[v] = true; }
+  var baris = [];
+  CUTI_KPM_2027_B.forEach(function(c) {
+    julatKeTarikh(c[0], c[1]).forEach(function(d) { if (!sedia[d]) { sedia[d] = true; baris.push(["'" + d, c[2]]); } });
+  });
+  if (baris.length) sheet.getRange(sheet.getLastRow() + 1, 1, baris.length, 2).setValues(baris);
+  props.setProperty("CUTI_KPM_2027_B_DIISI", new Date().toISOString());
+}
+
+// Senarai cuti umum/sekolah: [{ tarikh: "yyyy-MM-dd", nama }]
+var _CUTI_MEMO = null; // sekali setiap larian; dikosongkan bila senarai diubah
+function getCutiList() {
+  if (_CUTI_MEMO) return _CUTI_MEMO;
+  var sheet = pastikanTab(TAB_TARIKH.CUTI, HEADER_TARIKH.CUTI);
+  isiCutiKpmSekali(sheet);
+  var data = sheet.getDataRange().getValues(), out = [];
+  for (var i = 1; i < data.length; i++) { var v = toYMD(data[i][0]); if (v) out.push({ tarikh: v, nama: (data[i][1] || "Cuti").toString() }); }
+  _CUTI_MEMO = out;
+  return out;
+}
+function getCutiTarikh() { return getCutiList().map(function(c) { return c.tarikh; }); }
 
 function getTarikhList(jenis) {
-  var data = pastikanTab(TAB_TARIKH[jenis], ["Tarikh"]).getDataRange().getValues();
+  if (jenis === "CUTI") return getCutiTarikh();
+  var data = pastikanTab(TAB_TARIKH[jenis], HEADER_TARIKH[jenis]).getDataRange().getValues();
   var out = [];
   for (var i = 1; i < data.length; i++) { var v = toYMD(data[i][0]); if (v) out.push(v); }
   return out;
@@ -310,15 +418,19 @@ function getTarikhList(jenis) {
 function getTarikhTanpaHadList() { return getTarikhList("TANPA_HAD"); }
 
 // Hari persekolahan antara dua tarikh: Isnin–Jumaat, + Sabtu yang ditanda program. Ahad sentiasa dikecualikan.
+// Cuti umum/sekolah (tab CutiSekolah) dikecualikan, termasuk jika jatuh pada Sabtu program.
 // Kira dalam UTC supaya tak lari zon masa.
-function senaraiHariBekerja(mula, akhir, sabtuProgram) {
+function senaraiHariBekerja(mula, akhir, sabtuProgram, cuti) {
   sabtuProgram = sabtuProgram || [];
+  var setCuti = {};
+  (cuti === undefined ? getCutiTarikh() : cuti).forEach(function(d) { setCuti[d] = true; });
   var a = mula.split("-"), b = akhir.split("-");
   var cur = Date.UTC(+a[0], +a[1] - 1, +a[2]), end = Date.UTC(+b[0], +b[1] - 1, +b[2]);
   var out = [];
   while (cur <= end) {
     var d = new Date(cur), ymd = Utilities.formatDate(d, "UTC", "yyyy-MM-dd"), hari = d.getUTCDay();
-    if (hari >= 1 && hari <= 5) out.push(ymd);
+    if (setCuti[ymd]) { /* cuti umum / cuti sekolah */ }
+    else if (hari >= 1 && hari <= 5) out.push(ymd);
     else if (hari === 6 && sabtuProgram.indexOf(ymd) > -1) out.push(ymd);
     cur += 86400000;
   }
@@ -327,19 +439,19 @@ function senaraiHariBekerja(mula, akhir, sabtuProgram) {
 
 // Kiraan penggunaan kuota sehari (APPROVED + PENDING)
 function kiraPenggunaanKuota(dataCuti, sabtuProgram) {
-  var usage = {};
+  var usage = {}, cuti = getCutiTarikh();
   for (var i = 1; i < dataCuti.length; i++) {
     var st = dataCuti[i][9].toString();
     if (st !== "APPROVED" && st !== "PENDING") continue;
     var m = toYMD(dataCuti[i][4]), a = toYMD(dataCuti[i][5]);
     if (!isValidYMD(m) || !isValidYMD(a)) continue;
-    senaraiHariBekerja(m, a, sabtuProgram).forEach(function(d) { usage[d] = (usage[d] || 0) + 1; });
+    senaraiHariBekerja(m, a, sabtuProgram, cuti).forEach(function(d) { usage[d] = (usage[d] || 0) + 1; });
   }
   return usage;
 }
 
 function handleGetUnlimitedDates() {
-  return jsonResponse({ success: true, data: getTarikhList("TANPA_HAD"), sabtu: getTarikhList("SABTU"), versi: SERVER_VERSI });
+  return jsonResponse({ success: true, data: getTarikhList("TANPA_HAD"), sabtu: getTarikhList("SABTU"), cuti: getCutiList(), versi: SERVER_VERSI });
 }
 
 function handleAddUnlimitedDate(payload, sessionCheck) {
@@ -351,24 +463,32 @@ function handleAddUnlimitedDate(payload, sessionCheck) {
   if (jenis === "SABTU") dates = dates.filter(function(d) { var p = d.split("-"); return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])).getUTCDay() === 6; });
   if (dates.length === 0) return jsonResponse({ success: false, message: jenis === "SABTU" ? "Tiada hari Sabtu dalam pilihan." : "Tiada tarikh sah" });
 
+  if (dates.length > 400) return jsonResponse({ success: false, message: "Julat terlalu panjang (maksimum 400 hari)." });
   var sedia = getTarikhList(jenis);
   var baru = dates.filter(function(d, idx) { return sedia.indexOf(d) === -1 && dates.indexOf(d) === idx; });
   if (baru.length > 0) {
-    var sheet = pastikanTab(TAB_TARIKH[jenis], ["Tarikh"]);
-    sheet.getRange(sheet.getLastRow() + 1, 1, baru.length, 1).setValues(baru.map(function(d) { return ["'" + d]; }));
+    var sheet = pastikanTab(TAB_TARIKH[jenis], HEADER_TARIKH[jenis]);
+    if (jenis === "CUTI") {
+      var nama = sanitizeFormula((payload.nama || "").toString().trim().substring(0, 80)) || "Cuti tambahan";
+      sheet.getRange(sheet.getLastRow() + 1, 1, baru.length, 2).setValues(baru.map(function(d) { return ["'" + d, nama]; }));
+    } else {
+      sheet.getRange(sheet.getLastRow() + 1, 1, baru.length, 1).setValues(baru.map(function(d) { return ["'" + d]; }));
+    }
   }
-  logActivity(sessionCheck.emel, "TAMBAH_" + jenis, baru.join(","));
+  _CUTI_MEMO = null;
+  logActivity(sessionCheck.emel, "TAMBAH_" + jenis, baru.length > 20 ? baru[0] + " .. " + baru[baru.length - 1] + " (" + baru.length + " hari)" : baru.join(","));
   return jsonResponse({ success: true, message: "Tarikh ditambah", added: baru });
 }
 
 function handleRemoveUnlimitedDate(payload, sessionCheck) {
   if (sessionCheck.role !== "ADMIN") return jsonResponse({ success: false, message: "Ditolak" });
   var jenis = jenisTarikh(payload);
-  var sheet = pastikanTab(TAB_TARIKH[jenis], ["Tarikh"]);
+  var sheet = pastikanTab(TAB_TARIKH[jenis], HEADER_TARIKH[jenis]);
   var data = sheet.getDataRange().getValues();
   for (var i = data.length - 1; i >= 1; i--) {
     if (toYMD(data[i][0]) === payload.date) {
       sheet.deleteRow(i + 1);
+      _CUTI_MEMO = null;
       logActivity(sessionCheck.emel, "BUANG_" + jenis, payload.date);
       return jsonResponse({ success: true, message: "Dibuang" });
     }
@@ -380,9 +500,10 @@ function bersihkanSesi(tapis) {
   var sheet = pastikanTab("Sessions", HEADER_SESSIONS);
   var data = sheet.getDataRange().getValues();
   if (data.length <= 1) return;
-  var simpan = [data[0]];
-  for (var i = 1; i < data.length; i++) { if (!tapis(data[i])) simpan.push(data[i]); }
+  var simpan = [data[0]], dibuang = [];
+  for (var i = 1; i < data.length; i++) { if (!tapis(data[i])) simpan.push(data[i]); else dibuang.push("SESI_" + data[i][0]); }
   if (simpan.length === data.length) return;
+  CacheService.getScriptCache().removeAll(dibuang); // sesi yang dipadam tidak boleh terus hidup dalam cache
   sheet.getRange(1, 1, data.length, data[0].length).clearContent();
   sheet.getRange(1, 1, simpan.length, data[0].length).setValues(simpan);
 }
@@ -548,7 +669,7 @@ function handleLogout(payload) {
 
 function handleChangePassword(payload, sessionCheck) {
   var newP = payload.newPassword || "", oldP = payload.oldPassword || "";
-  if (newP.length < 6) return jsonResponse({ success: false, message: "Kata laluan baharu minimum 6 aksara." });
+  if (newP.length < PASSWORD_MIN) return jsonResponse({ success: false, message: "Kata laluan baharu minimum " + PASSWORD_MIN + " aksara." });
   if (!checkRateLimit(sessionCheck.emel)) return jsonResponse({ success: false, message: "Terlalu banyak percubaan. Sila tunggu 5 minit." });
 
   var u = cariPengguna(sessionCheck.emel);
@@ -569,7 +690,7 @@ function handleChangePassword(payload, sessionCheck) {
 
 function handleAddUser(payload, sessionCheck) {
   if (sessionCheck.role !== "ADMIN") return jsonResponse({ success: false, message: "Capaian ditolak." });
-  if (!payload.emel || !payload.nama || !payload.role || !payload.tempPassword) return jsonResponse({ success: false, message: "Sila isi semua maklumat." });
+  if (!payload.emel || !payload.nama || !payload.role) return jsonResponse({ success: false, message: "Sila isi semua maklumat." });
 
   var emelBaru = payload.emel.toLowerCase().trim();
   var role = payload.role.toString().toUpperCase().trim();
@@ -579,19 +700,23 @@ function handleAddUser(payload, sessionCheck) {
 
   var sheetUsers = pastikanTab("Users", HEADER_USERS);
   var salt = Utilities.getUuid();
-  sheetUsers.appendRow([sanitizeFormula(emelBaru), sanitizeFormula(payload.nama), role, hashPassword(payload.tempPassword, salt), salt, true, "", "", "ACTIVE", new Date()]);
+  var kataSementara = janaKataLaluanSementara(); // rawak bagi setiap pengguna (bukan satu kata laluan sama untuk semua)
+  sheetUsers.appendRow([sanitizeFormula(emelBaru), sanitizeFormula(payload.nama), role, hashPassword(kataSementara, salt), salt, true, "", "", "ACTIVE", new Date()]);
 
   try {
     MailApp.sendEmail(emelBaru, "[e-Cuti] Akaun Portal SMIAAG Telah Dicipta",
       "Salam sejahtera,\n\nAkaun portal e-Cuti SMIAAG anda telah didaftarkan dengan peranan " + role + ".\n\n" +
       "ID Log Masuk: " + emelBaru + "\n" +
-      "Kata Laluan Sementara: " + payload.tempPassword + "\n\n" +
+      "Kata Laluan Sementara: " + kataSementara + "\n\n" +
       "Sila log masuk ke portal dan ANDA DIWAJIBKAN menukar kata laluan pada log masuk pertama.\n\nTerima kasih."
     );
-  } catch(e) {}
+    var emelDihantar = true;
+  } catch(e) { emelDihantar = false; }
 
   logActivity(sessionCheck.emel, "TAMBAH_PENGGUNA", emelBaru);
-  return jsonResponse({ success: true, message: "Pengguna berjaya ditambah dan emel kata laluan sementara telah dihantar!" });
+  // Kata laluan sementara dipulangkan SEKALI kepada admin sebagai sandaran jika emel tidak sampai.
+  return jsonResponse({ success: true, tempPassword: kataSementara, emelDihantar: !!emelDihantar,
+    message: emelDihantar ? "Pengguna ditambah dan kata laluan sementara dihantar ke emel." : "Pengguna ditambah, tetapi emel GAGAL dihantar. Serahkan kata laluan sementara secara terus." });
 }
 
 function handleEditUser(payload, sessionCheck) {
@@ -632,20 +757,63 @@ function handleEditUser(payload, sessionCheck) {
   return jsonResponse({ success: true, message: "Maklumat pengguna berjaya dikemaskini." });
 }
 
-function handleGetDataGuru(sessionCheck) {
-  var data = pastikanTab("DATA_GURU", ["NAMA_GURU", "BIL_CUTI_TAHUNAN_BERBAKI"]).getDataRange().getValues();
-  var isAdmin = sessionCheck.role === "ADMIN";
-  var u = isAdmin ? null : cariPengguna(sessionCheck.emel);
-  var namaSendiri = u ? u.data[1].toString().trim() : "";
-  var teachers = [];
-  for (var i = 1; i < data.length; i++) {
-    if (!data[i][0]) continue;
-    var nama = data[i][0].toString().trim();
-    // Bukan admin: nampak senarai nama (untuk jadual relief), kelayakan hanya milik sendiri
-    var kelayakan = (isAdmin || nama === namaSendiri) ? (parseInt(data[i][1], 10) || 0) : null;
-    teachers.push({ NAMA_GURU: nama, BIL_CUTI_TAHUNAN_BERBAKI: kelayakan });
+// ---- Padanan guru antara DATA_GURU (kelayakan cuti), Users (akaun) dan PermohonanCuti ----
+// Padanan utama ialah EMEL (lajur EMEL dalam DATA_GURU). Jika lajur itu kosong, guna nama yang sama dalam Users
+// (abaikan huruf besar/kecil dan ruang berlebihan) selagi hanya SATU akaun aktif bernama begitu.
+function normNama(v) { return String(v === null || v === undefined ? "" : v).replace(/\s+/g, " ").trim().toUpperCase(); }
+
+function petaDataGuru(semakSemula) {
+  var sheet = pastikanTab("DATA_GURU", ["NAMA_GURU", "BIL_CUTI_TAHUNAN_BERBAKI", "EMEL"], semakSemula);
+  var data = sheet.getDataRange().getValues();
+  var kepala = data[0].map(function(h) { return String(h).trim(); });
+  var iNama = kepala.indexOf("NAMA_GURU"), iBil = kepala.indexOf("BIL_CUTI_TAHUNAN_BERBAKI"), iEmel = kepala.indexOf("EMEL");
+  var users = pastikanTab("Users", HEADER_USERS).getDataRange().getValues();
+  var ikutNama = {};
+  for (var u = 1; u < users.length; u++) {
+    if (users[u][8] !== "ACTIVE") continue;
+    var k = normNama(users[u][1]);
+    (ikutNama[k] = ikutNama[k] || []).push(users[u][0].toString().toLowerCase());
   }
+  var senarai = [], emelKeNama = {};
+  for (var i = 1; i < data.length; i++) {
+    if (!data[i][iNama]) continue;
+    var nama = data[i][iNama].toString().trim();
+    var emel = iEmel > -1 ? String(data[i][iEmel] || "").trim().toLowerCase() : "";
+    var padan = emel ? "EMEL" : "";
+    if (!emel) { var c = ikutNama[normNama(nama)] || []; if (c.length === 1) { emel = c[0]; padan = "NAMA"; } }
+    if (emel && !emelKeNama[emel]) emelKeNama[emel] = nama;
+    senarai.push({ baris: i + 1, nama: nama, kelayakan: parseInt(data[i][iBil], 10) || 0, emel: emel, padan: padan });
+  }
+  return { sheet: sheet, lajurEmel: iEmel + 1, senarai: senarai, emelKeNama: emelKeNama };
+}
+
+function handleGetDataGuru(sessionCheck) {
+  var peta = petaDataGuru();
+  var isAdmin = sessionCheck.role === "ADMIN";
+  var emelSendiri = (sessionCheck.emel || "").toLowerCase();
+  var teachers = peta.senarai.map(function(g) {
+    var sendiri = !!g.emel && g.emel === emelSendiri;
+    // Bukan admin: nampak senarai nama (untuk jadual relief), kelayakan hanya milik sendiri
+    var t = { NAMA_GURU: g.nama, BIL_CUTI_TAHUNAN_BERBAKI: (isAdmin || sendiri) ? g.kelayakan : null, SENDIRI: sendiri };
+    if (isAdmin) { t.EMEL = g.emel; t.PADAN = g.padan; } // PADAN kosong = tiada akaun sepadan (isi lajur EMEL)
+    return t;
+  });
   return jsonResponse({ success: true, data: teachers });
+}
+
+/**
+ * Jalankan SEKALI dari editor Apps Script: isi lajur EMEL dalam DATA_GURU daripada akaun Users yang namanya sama.
+ * Baris yang tidak dapat dipadankan disenaraikan dalam log untuk diisi secara manual.
+ */
+function isiEmelDataGuru() {
+  var peta = petaDataGuru(true), diisi = 0, tiada = [];
+  peta.senarai.forEach(function(g) {
+    if (g.padan === "NAMA") { peta.sheet.getRange(g.baris, peta.lajurEmel).setValue(sanitizeFormula(g.emel)); diisi++; }
+    else if (!g.padan) tiada.push(g.nama);
+  });
+  var mesej = diisi + " emel diisi. " + (tiada.length ? "Tiada akaun sepadan (isi lajur EMEL sendiri): " + tiada.join("; ") : "Semua guru dipadankan.");
+  Logger.log(mesej);
+  return mesej;
 }
 
 function bacaLampiran(raw) {
@@ -658,6 +826,7 @@ function handleGetLeaveApplications(payload, sessionCheck) {
   var apps = [];
   var isAdmin = sessionCheck.role === "ADMIN";
   var userEmail = (sessionCheck.emel || "").toLowerCase();
+  var emelKeNama = petaDataGuru().emelKeNama;
 
   for (var i = 1; i < data.length; i++) {
     var status = data[i][9].toString();
@@ -671,7 +840,8 @@ function handleGetLeaveApplications(payload, sessionCheck) {
 
     var item = {
       id: data[i][0].toString(), teacherName: data[i][1].toString(),
-      startDate: toYMD(data[i][4]), endDate: toYMD(data[i][5]), totalDays: parseInt(data[i][6], 10) || 0, status: status
+      startDate: toYMD(data[i][4]), endDate: toYMD(data[i][5]), totalDays: parseInt(data[i][6], 10) || 0, status: status,
+      guruData: emelKeNama[emelPemohon] || "" // nama dalam DATA_GURU, dipadankan ikut EMEL pemohon (untuk kiraan baki)
     };
 
     if (isAdmin || milikSendiri) {
@@ -700,7 +870,7 @@ function handleGetAttachment(payload, sessionCheck) {
     var milik = data[i][2].toString().toLowerCase() === sessionCheck.emel.toLowerCase();
     if (sessionCheck.role !== "ADMIN" && !milik) return jsonResponse({ success: false, message: "Capaian ditolak." });
     var lamp = bacaLampiran(data[i][11]);
-    if (!lamp) return jsonResponse({ success: false, message: "Tiada lampiran." });
+    if (!lamp) return jsonResponse({ success: false, message: /"dipadam"/.test(String(data[i][11])) ? "Lampiran telah dipadam selepas tempoh simpanan " + TAHUN_SIMPAN + " tahun." : "Tiada lampiran." });
     var blob = DriveApp.getFileById(lamp.fileId).getBlob();
     logActivity(sessionCheck.emel, "LIHAT_LAMPIRAN", payload.appId);
     return jsonResponse({ success: true, name: lamp.name, mime: blob.getContentType(), base64: Utilities.base64Encode(blob.getBytes()) });
@@ -727,7 +897,7 @@ function handleSubmitLeave(payload, sessionCheck) {
 
   var sabtuProgram = getTarikhList("SABTU");
   var hari = senaraiHariBekerja(mula, akhir, sabtuProgram);
-  if (hari.length === 0) return jsonResponse({ success: false, message: "Tiada hari persekolahan dalam julat ini (Sabtu & Ahad cuti, kecuali Sabtu yang ada program)." });
+  if (hari.length === 0) return jsonResponse({ success: false, message: "Tiada hari persekolahan dalam julat ini (Sabtu, Ahad dan cuti umum/sekolah tidak dikira, kecuali Sabtu yang ada program)." });
   if (hari.length > 60) return jsonResponse({ success: false, message: "Julat cuti terlalu panjang (maksimum 60 hari)." });
 
   if (!app.fileBase64) return jsonResponse({ success: false, message: "Lampiran surat rasmi adalah wajib." });
@@ -815,5 +985,99 @@ function handleApproveLeave(payload, sessionCheck) {
     return jsonResponse({ success: true, message: "Status dikemaskini & emel dihantar." });
   }
   return jsonResponse({ success: false, message: "Permohonan tidak dijumpai." });
+}
+
+// ====================================================================
+// PENYELENGGARAAN MINGGUAN: tempoh simpanan (PDPA) dan sandaran
+// Jalankan pasangPencetus() SEKALI dari editor Apps Script. Selepas itu selenggaraMingguan berjalan setiap Ahad 3 pagi.
+// ====================================================================
+var TAHUN_SIMPAN = 2;          // lampiran dan log aktiviti disimpan 2 tahun
+var SANDARAN_BILANGAN = 4;     // bilangan salinan sandaran yang disimpan (bergilir)
+var SANDARAN_TANPA = ["Sessions"]; // token log masuk tidak disalin
+
+function pasangPencetus() {
+  var ada = ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === "selenggaraMingguan"; });
+  if (!ada) ScriptApp.newTrigger("selenggaraMingguan").timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(3).create();
+  var mesej = "Pencetus selenggaraMingguan (Ahad 3 pagi) " + (ada ? "sudah wujud." : "dipasang.");
+  Logger.log(mesej);
+  return mesej;
+}
+
+function selenggaraMingguan() {
+  var hasil = [];
+  try { hasil.push(bersihkanLampiranLama()); } catch (e) { hasil.push("Lampiran: RALAT " + e); }
+  try { hasil.push(bersihkanLogLama()); } catch (e) { hasil.push("Log: RALAT " + e); }
+  try { hasil.push(sandaranEcuti()); } catch (e) { hasil.push("Sandaran: RALAT " + e); }
+  Logger.log(hasil.join("\n"));
+  return hasil;
+}
+
+function tarikhHadSimpan() {
+  var d = new Date();
+  d.setFullYear(d.getFullYear() - TAHUN_SIMPAN);
+  return Utilities.formatDate(d, TZ, "yyyy-MM-dd");
+}
+
+// Lampiran (surat, MC) dibuang ke Trash Drive 2 tahun selepas tarikh akhir cuti. Rekod permohonan kekal.
+function bersihkanLampiranLama() {
+  var had = tarikhHadSimpan();
+  var sheet = pastikanTab("PermohonanCuti", HEADER_CUTI);
+  var data = sheet.getDataRange().getValues(), n = 0;
+  for (var i = 1; i < data.length; i++) {
+    var lamp = bacaLampiran(data[i][11]), akhir = toYMD(data[i][5]);
+    if (!lamp || !isValidYMD(akhir) || akhir >= had) continue;
+    try { DriveApp.getFileById(lamp.fileId).setTrashed(true); } catch (e) { /* fail sudah tiada */ }
+    sheet.getRange(i + 1, 12).setValue(JSON.stringify({ name: lamp.name, dipadam: Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd") }));
+    n++;
+  }
+  if (n) logActivity("sistem", "PADAM_LAMPIRAN_LAMA", n + " fail");
+  return "Lampiran: " + n + " fail melebihi " + TAHUN_SIMPAN + " tahun dipadam.";
+}
+
+// Log aktiviti melebihi 2 tahun dibuang (baris lama berada di atas).
+function bersihkanLogLama() {
+  var had = new Date(); had.setFullYear(had.getFullYear() - TAHUN_SIMPAN);
+  var sheet = pastikanTab("Log", ["Masa", "Emel", "Tindakan", "Status"]);
+  var data = sheet.getDataRange().getValues(), n = 0;
+  for (var i = 1; i < data.length; i++) {
+    var m = data[i][0], t = (m instanceof Date) ? m.getTime() : Date.parse(m);
+    if (!(t < had.getTime())) break;
+    n++;
+  }
+  for (var k = 0; k < n; k++) sheet.deleteRow(2);
+  return "Log: " + n + " baris melebihi " + TAHUN_SIMPAN + " tahun dibuang.";
+}
+
+// Sandaran ke Spreadsheet berasingan dalam Drive pemilik skrip; 4 salinan terakhir, yang paling lama ditulis semula.
+// Fail sandaran mengandungi data pengguna dan hash kata laluan: JANGAN kongsi.
+function sandaranEcuti() {
+  var props = PropertiesService.getScriptProperties(), ids = [];
+  try { ids = JSON.parse(props.getProperty("SANDARAN_IDS") || "[]"); } catch (e) { ids = []; }
+  var sumber = bukaSpreadsheet();
+  var nama = "SANDARAN e-Cuti SMIAAG " + Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd HH.mm");
+  var sasaran = null, id = null;
+  if (ids.length >= SANDARAN_BILANGAN) {
+    id = ids.pop();
+    try { sasaran = SpreadsheetApp.openById(id); sasaran.rename(nama); } catch (e) { sasaran = null; }
+  }
+  if (!sasaran) { sasaran = SpreadsheetApp.create(nama); id = sasaran.getId(); }
+  var lama = sasaran.getSheets(), bil = 0;
+  sumber.getSheets().forEach(function(sh) {
+    var n = sh.getName();
+    if (SANDARAN_TANPA.indexOf(n) !== -1) return;
+    var r = sh.getLastRow(), c = sh.getLastColumn();
+    var t = sasaran.insertSheet("~" + n);
+    if (r > 0 && c > 0) {
+      t.getRange(1, 1, r, c).setValues(sh.getRange(1, 1, r, c).getValues().map(function(row) {
+        return row.map(function(v) { return typeof v === "string" && /^[=+\-@]/.test(v) ? "'" + v : v; }); // jangan jadi formula dalam sandaran
+      }));
+    }
+    bil++;
+  });
+  lama.forEach(function(x) { sasaran.deleteSheet(x); });
+  sasaran.getSheets().forEach(function(x) { x.setName(x.getName().replace(/^~/, "")); });
+  ids.unshift(id);
+  props.setProperty("SANDARAN_IDS", JSON.stringify(ids.slice(0, SANDARAN_BILANGAN)));
+  return "Sandaran: \"" + nama + "\" (" + bil + " tab).";
 }
 

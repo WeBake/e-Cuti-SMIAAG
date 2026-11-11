@@ -97,8 +97,8 @@
         <h3 class="text-lg font-extrabold text-slate-800">Tukar Kata Laluan Wajib</h3>
         <p class="text-xs text-slate-500 mb-5">Untuk keselamatan, anda wajib menukar kata laluan sementara sebelum menggunakan sistem.</p>
         <div class="space-y-3">
-          <input type="password" id="force-old-password" placeholder="Kata Laluan Sementara (cth: TukarSaya123)" class="w-full px-4 py-3 rounded-xl border text-xs focus:ring-2 outline-none">
-          <input type="password" id="force-new-password" placeholder="Kata Laluan Baharu (Min 6 aksara)" class="w-full px-4 py-3 rounded-xl border text-xs focus:ring-2 outline-none">
+          <input type="password" id="force-old-password" placeholder="Kata Laluan Sementara (daripada emel)" class="w-full px-4 py-3 rounded-xl border text-xs focus:ring-2 outline-none">
+          <input type="password" id="force-new-password" placeholder="Kata Laluan Baharu (Min 8 aksara)" class="w-full px-4 py-3 rounded-xl border text-xs focus:ring-2 outline-none">
           <button onclick="forceChangePassword()" class="w-full py-3 rounded-xl bg-amber-500 text-white font-bold text-xs shadow hover:bg-amber-600 transition-colors">Simpan Kata Laluan</button>
         </div>
       </div>
@@ -180,6 +180,12 @@
               <p class="text-xs font-bold text-slate-600" id="file-name-display">Muat naik Surat Rasmi (Max 5MB).</p>
               <button type="button" onclick="document.getElementById('form-attachment-file').click()" class="mt-3 px-5 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold shadow-sm hover:bg-indigo-700">Pilih Fail</button>
             </div>
+            <details class="mt-3 text-[11px] text-slate-500 leading-relaxed">
+              <summary class="cursor-pointer font-bold text-slate-600">Notis privasi (PDPA)</summary>
+              <p class="mt-2">Maklumat permohonan (nama, emel, tarikh, sebab, jadual relief) dan lampiran disimpan dalam Google Sheets dan Google Drive milik sekolah, yang mungkin terletak di luar Malaysia. Ia digunakan untuk memproses dan merekod cuti sahaja.</p>
+              <p class="mt-1">Butiran dan lampiran hanya dilihat oleh anda dan pentadbir. Pengguna lain yang log masuk hanya nampak nama dan tarikh cuti yang diluluskan.</p>
+              <p class="mt-1">Lampiran dipadam 2 tahun selepas tarikh cuti, dan log aktiviti selepas 2 tahun. Untuk salinan, pembetulan atau pemadaman data, hubungi pentadbir e-Cuti.</p>
+            </details>
           </div>
           <p class="text-[10px] text-slate-500 leading-relaxed bg-slate-50 border rounded-xl p-3"><i class="fa-solid fa-shield-halved text-indigo-500 mr-1"></i><b>Notis Privasi:</b> Maklumat dan surat yang dihantar hanya digunakan untuk urusan kelulusan cuti dan jadual relief. Ia boleh dilihat oleh pentadbir sekolah dan anda sahaja, dan disimpan mengikut tempoh rekod perkhidmatan sekolah.</p>
           <div class="pt-4 border-t flex justify-end"><button type="submit" id="btn-submit-leave" class="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-extrabold shadow-md hover:shadow-lg hover:scale-[1.02] transition-all flex items-center justify-center gap-2"><i class="fa-solid fa-paper-plane"></i> Hantar Permohonan</button></div>
@@ -223,7 +229,7 @@
           <div id="forgot-step-2" class="hidden space-y-3 text-left">
             <p class="text-[10px] text-slate-500 text-center mb-4">Kod 6-digit telah dihantar ke emel anda (Sila semak Spam jika tiada). Kod sah selama 15 minit.</p>
             <input type="text" id="forgot-code" placeholder="Kod 6-Digit (Cth: 123456)" maxlength="6" class="w-full px-4 py-3 rounded-xl border text-xs font-mono text-center tracking-[0.5em] outline-none">
-            <input type="password" id="forgot-new-pass" placeholder="Kata Laluan Baharu" class="w-full px-4 py-3 rounded-xl border text-xs outline-none mt-2">
+            <input type="password" id="forgot-new-pass" placeholder="Kata Laluan Baharu (Min 8 aksara)" class="w-full px-4 py-3 rounded-xl border text-xs outline-none mt-2">
             <button onclick="confirmResetCode()" class="w-full py-3 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-md mt-2 hover:bg-emerald-700 transition-colors">Sahkan & Tukar Password</button>
           </div>
         </div>
@@ -283,6 +289,7 @@
             <div class="flex flex-wrap gap-2 mb-4 text-xs font-bold">
               <button type="button" id="mode-TANPA_HAD" onclick="setQuotaMode('TANPA_HAD')" class="px-4 py-2 rounded-xl border">Kuota Tanpa Had</button>
               <button type="button" id="mode-SABTU" onclick="setQuotaMode('SABTU')" class="px-4 py-2 rounded-xl border">Sabtu Ada Program</button>
+              <button type="button" id="mode-CUTI" onclick="setQuotaMode('CUTI')" class="px-4 py-2 rounded-xl border">Cuti Umum / Sekolah</button>
             </div>
             <p id="quota-mode-help" class="text-[10px] text-slate-500 mb-4"></p>
             
@@ -290,6 +297,7 @@
               <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Tarikh Mula</label><input type="date" id="admin-unlim-start" class="px-3 py-2 rounded-xl text-xs outline-none border focus:ring-2"></div>
               <div class="self-end pb-2"><span class="text-xs font-bold text-slate-400">hingga</span></div>
               <div><label class="block text-[10px] font-bold text-slate-500 mb-1">Tarikh Akhir (Pilihan)</label><input type="date" id="admin-unlim-end" class="px-3 py-2 rounded-xl text-xs outline-none border focus:ring-2"></div>
+              <div id="admin-cuti-nama-wrap" class="hidden"><label class="block text-[10px] font-bold text-slate-500 mb-1">Nama Cuti</label><input type="text" id="admin-cuti-nama" maxlength="80" placeholder="cth: Hari Kebangsaan" class="px-3 py-2 rounded-xl text-xs outline-none border focus:ring-2"></div>
               <div class="self-end"><button onclick="addUnlimitedBulk()" id="quota-bulk-btn" class="px-5 py-2 rounded-xl bg-purple-600 text-white text-xs font-bold hover:bg-purple-700 shadow-sm transition-colors">Set Kuota Tanpa Had</button></div>
             </div>
             
@@ -297,7 +305,7 @@
               <div class="flex items-center justify-between mb-4"><button onclick="changeQuotaMonth(-1)" class="p-2 bg-slate-100 rounded-lg hover:bg-slate-200"><i class="fa-solid fa-chevron-left text-xs"></i></button><h4 id="quota-calendar-title" class="font-bold text-sm text-slate-700">Bulan</h4><button onclick="changeQuotaMonth(1)" class="p-2 bg-slate-100 rounded-lg hover:bg-slate-200"><i class="fa-solid fa-chevron-right text-xs"></i></button></div>
               <div class="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400 mb-2 border-b pb-2"><div class="text-rose-500">Ahd</div><div>Isn</div><div>Sel</div><div>Rab</div><div>Kha</div><div>Jum</div><div class="text-indigo-500">Sab</div></div>
               <div id="quota-calendar-grid" class="grid grid-cols-7 gap-1 sm:gap-2"></div>
-              <div class="mt-4 flex items-center justify-center gap-4 text-[9px] font-bold text-slate-500"><div class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-purple-500"></span> Tanpa Had</div><div class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-amber-400"></span> Sabtu Program</div><div class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-slate-100 border"></span> Biasa (Max 3)</div></div>
+              <div class="mt-4 flex items-center justify-center gap-4 text-[9px] font-bold text-slate-500"><div class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-purple-500"></span> Tanpa Had</div><div class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-amber-400"></span> Sabtu Program</div><div class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-teal-500"></span> Cuti</div><div class="flex items-center gap-1"><span class="w-3 h-3 rounded bg-slate-100 border"></span> Biasa (Max 3)</div></div>
             </div>
           </div>
         </div>
@@ -311,7 +319,7 @@
             <p class="text-[10px] text-slate-500 mb-4">Penukaran kata laluan akan memaksa log keluar automatik dari peranti lain.</p>
             <div class="flex flex-col sm:flex-row gap-3">
               <input type="password" id="setting-old-pass" placeholder="Kata Laluan Semasa" class="flex-1 px-4 py-2.5 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-indigo-100">
-              <input type="password" id="setting-new-pass" placeholder="Kata Laluan Baharu (Min 6 Aksara)" class="flex-1 px-4 py-2.5 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-indigo-100">
+              <input type="password" id="setting-new-pass" placeholder="Kata Laluan Baharu (Min 8 Aksara)" class="flex-1 px-4 py-2.5 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-indigo-100">
               <button onclick="changeOwnPassword()" class="px-5 py-2.5 rounded-xl bg-indigo-600 text-white font-bold text-xs shadow-sm hover:bg-indigo-700 transition-colors">Simpan Kata Laluan</button>
             </div>
           </div>
@@ -327,7 +335,7 @@
               <div class="flex-1 w-full"><label class="text-[10px] font-bold text-slate-500">Alamat Emel</label><input type="email" id="set-add-email" class="w-full px-3 py-2.5 rounded-lg border text-xs focus:ring-2 focus:ring-emerald-100 outline-none"></div>
               <div class="flex-1 w-full"><label class="text-[10px] font-bold text-slate-500">Nama Penuh</label><input type="text" id="set-add-nama" list="teacher-names-list" placeholder="Taip / pilih dari senarai" class="w-full px-3 py-2.5 rounded-lg border text-xs focus:ring-2 focus:ring-emerald-100 outline-none"></div>
               <div class="w-full md:w-32"><label class="text-[10px] font-bold text-slate-500">Peranan (Role)</label><select id="set-add-role" class="w-full px-3 py-2.5 rounded-lg border text-xs focus:ring-2 focus:ring-emerald-100 outline-none"><option value="GURU">GURU</option><option value="STAF">STAF</option><option value="ADMIN">ADMIN</option></select></div>
-              <div class="flex-1 w-full"><label class="text-[10px] font-bold text-slate-500">Kata Laluan Sementara</label><input type="text" id="set-add-pass" class="w-full px-3 py-2.5 rounded-lg border text-xs focus:ring-2 focus:ring-emerald-100 outline-none" value="TukarSaya123"></div>
+              <div class="flex-1 w-full"><label class="text-[10px] font-bold text-slate-500">Kata Laluan Sementara</label><p class="px-3 py-2.5 rounded-lg border border-dashed text-[11px] text-slate-500">Dijana rawak dan dihantar ke emel pengguna</p></div>
               <button onclick="addNewUser()" class="w-full md:w-auto px-5 py-2.5 bg-emerald-600 text-white font-bold text-xs rounded-lg whitespace-nowrap shadow-sm hover:bg-emerald-700 transition-colors">Tambah User</button>
             </div>
 
@@ -387,12 +395,14 @@
     const GAS_URL = "https://script.google.com/macros/s/AKfycbyIQ15mj6bJN1dbQ2HyZ-L03GlGqjd-xvaVwfhPB5HUp8MmLzDZZE0vNMsV6jarca90ZQ/exec";
     // ====================================================================
 
-    const VERSI_WEB = "v2.3"; // tukar bila index.html dikemas kini
+    const VERSI_WEB = "v2.6"; // tukar bila index.html dikemas kini
     const MAX_GURU_SEHARI = 3;
     const BULAN = ["Januari","Februari","Mac","April","Mei","Jun","Julai","Ogos","September","Oktober","November","Disember"];
 
     // STATE
     let teachersData = [], leaveApplications = [], unlimitedDates = [], sabtuProgram = [], quotaUsage = {}, usersCache = [];
+    let cutiDates = [], cutiNama = {}; // cuti umum / cuti sekolah: tarikh dan namanya
+    function setCuti(list) { cutiDates = (list || []).map(c => c.tarikh); cutiNama = {}; (list || []).forEach(c => { cutiNama[c.tarikh] = c.nama; }); }
     let quotaMode = 'TANPA_HAD';
     let currentCalendarDate = new Date(), quotaCalendarDate = new Date();
     currentCalendarDate.setDate(1); quotaCalendarDate.setDate(1);
@@ -485,7 +495,7 @@
       const pUnlim = apiPost({ action: "GET_UNLIMITED_DATES" });
       const [resApps, resUnlim] = await Promise.all([pApps, pUnlim]);
       if (resApps.success) { leaveApplications = resApps.data; quotaUsage = resApps.usage || {}; }
-      if (resUnlim.success) { unlimitedDates = resUnlim.data; sabtuProgram = resUnlim.sabtu || []; }
+      if (resUnlim.success) { unlimitedDates = resUnlim.data; sabtuProgram = resUnlim.sabtu || []; setCuti(resUnlim.cuti); }
       const cap = document.getElementById('versi-cap'); if (cap) cap.innerText = `Web ${VERSI_WEB} · Server: ${resUnlim.success ? (resUnlim.versi ? 'v' + resUnlim.versi : 'LAMA (belum dideploy versi baharu)') : 'tiada sambungan'}`;
       renderCalendar();
       updateFormInfo();
@@ -503,8 +513,12 @@
     function getKelayakan(nama) { const t = teachersData.find(x => samaNama(x.NAMA_GURU, nama)); return t ? (parseInt(t.BIL_CUTI_TAHUNAN_BERBAKI) || 0) : null; }
     function getHariIkutStatus(nama, status) {
       const tahun = String(new Date().getFullYear());
-      return leaveApplications.filter(a => samaNama(a.teacherName, nama) && a.status === status && String(a.startDate).startsWith(tahun)).reduce((s, a) => s + (parseInt(a.totalDays) || 0), 0);
+      return leaveApplications.filter(a => samaNama(namaData(a), nama) && a.status === status && String(a.startDate).startsWith(tahun)).reduce((s, a) => s + (parseInt(a.totalDays) || 0), 0);
     }
+    // Nama guru dalam DATA_GURU bagi satu permohonan: server memadankan ikut EMEL pemohon (guruData); jika tiada, guna nama pemohon
+    const namaData = a => a.guruData || a.teacherName;
+    // Nama sendiri dalam DATA_GURU (dipadankan server ikut emel log masuk); jika tiada, guna nama akaun
+    const namaSendiri = () => { const t = teachersData.find(x => x.SENDIRI); return t ? t.NAMA_GURU : currentNama; };
     function getBakiSemasa(nama) { return (getKelayakan(nama) || 0) - getHariIkutStatus(nama, 'APPROVED'); }
 
     function teacherOptions(firstLabel) {
@@ -544,11 +558,11 @@
       document.getElementById('form-teacher-name').value = currentNama;
       document.getElementById('form-teacher-email').value = currentEmel;
       const warn = document.getElementById('form-teacher-warn');
-      if (teachersData.length && getKelayakan(currentNama) === null) {
+      if (teachersData.length && getKelayakan(namaSendiri()) === null) {
         warn.innerText = "Nama akaun anda tiada dalam senarai DATA_GURU, jadi baki tak dapat dikira. Sila maklumkan pentadbir.";
         warn.classList.remove('hidden');
       } else warn.classList.add('hidden');
-      const baki = getBakiSemasa(currentNama), pending = getHariIkutStatus(currentNama, 'PENDING');
+      const baki = getBakiSemasa(namaSendiri()), pending = getHariIkutStatus(namaSendiri(), 'PENDING');
       const balSpan = document.getElementById('form-teacher-balance');
       balSpan.innerText = baki + " Hari" + (pending ? ` (${pending} dlm semakan)` : "");
       balSpan.className = `text-sm font-black px-2 py-0.5 rounded shadow-sm bg-white ${baki<=0 ? 'text-rose-500' : 'text-indigo-600'}`;
@@ -569,13 +583,15 @@
         const dayOfWeek = new Date(year, month, day).getDay(), yyyymmdd = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
         const approvedApps = leaveApplications.filter(a => a.status === 'APPROVED' && a.startDate <= yyyymmdd && a.endDate >= yyyymmdd);
         const isProgram = (dayOfWeek === 6 && sabtuProgram.includes(yyyymmdd));
-        const isSunday = (dayOfWeek === 0) || (dayOfWeek === 6 && !isProgram); // hari cuti (Ahad, dan Sabtu tanpa program)
+        const isCuti = cutiDates.includes(yyyymmdd); // cuti umum / cuti sekolah
+        const isSunday = isCuti || (dayOfWeek === 0) || (dayOfWeek === 6 && !isProgram); // bukan hari persekolahan
         const isUnlimited = unlimitedDates.includes(yyyymmdd);
         const count = quotaUsage[yyyymmdd] || 0; // lulus + dalam semakan
         const isFull = (!isUnlimited && count >= MAX_GURU_SEHARI);
 
         let headerHtml = `<div class="flex items-center justify-between"><span class="text-xs sm:text-sm font-black ${dayOfWeek===0?'text-rose-400':(dayOfWeek===6?'text-indigo-500':'text-slate-700')}">${day}</span>${isProgram?'<span class="hidden sm:inline px-1 rounded text-[8px] font-bold bg-amber-100 text-amber-700">Program</span>':''}`;
-        if (isSunday) headerHtml += `<span class="hidden sm:inline text-[9px] text-slate-400 font-bold">Cuti</span></div>`;
+        if (isCuti) headerHtml += `<span class="px-1 rounded text-[8px] sm:text-[9px] font-bold bg-teal-100 text-teal-700 truncate max-w-[70%]" title="${escapeHTML(cutiNama[yyyymmdd])}">${escapeHTML(cutiNama[yyyymmdd])}</span></div>`;
+        else if (isSunday) headerHtml += `<span class="hidden sm:inline text-[9px] text-slate-400 font-bold">Cuti</span></div>`;
         else if (isUnlimited) headerHtml += `<span class="px-1 py-0.5 rounded text-[8px] sm:text-[9px] font-bold bg-purple-100 text-purple-700">${count}/∞</span></div>`;
         else if (!isFull) headerHtml += `<span class="px-1 py-0.5 rounded text-[8px] sm:text-[9px] font-bold bg-emerald-100 text-emerald-700">${count}/${MAX_GURU_SEHARI}<span class="hidden sm:inline"> Diisi</span></span></div>`;
         else headerHtml += `<span class="px-1 py-0.5 rounded text-[8px] sm:text-[9px] font-bold bg-rose-100 text-rose-700">PENUH</span></div>`;
@@ -607,7 +623,7 @@
     function kiraHariBekerja(sVal, eVal) {
       let s = parseYMD(sVal), e = parseYMD(eVal), c = 0;
       if (e < s) return -1;
-      while (s <= e) { const d = s.getDay(); if ((d >= 1 && d <= 5) || (d === 6 && sabtuProgram.includes(ymdOf(s)))) c++; s.setDate(s.getDate() + 1); }
+      while (s <= e) { const d = s.getDay(), y = ymdOf(s); if (!cutiDates.includes(y) && ((d >= 1 && d <= 5) || (d === 6 && sabtuProgram.includes(y)))) c++; s.setDate(s.getDate() + 1); }
       return c;
     }
 
@@ -688,7 +704,7 @@
 
     async function confirmResetCode() {
       const kod = document.getElementById('forgot-code').value, newP = document.getElementById('forgot-new-pass').value;
-      if (!kod || newP.length < 6) return showToast("Ralat", "Sila periksa format kod dan pastikan password minimum 6 aksara.", "error");
+      if (!kod || newP.length < 8) return showToast("Ralat", "Sila periksa format kod dan pastikan kata laluan minimum 8 aksara.", "error");
       showToast("Mengesahkan...", "Menukar kata laluan...", "info");
       const res = await apiPost({ action: "SAHKAN_KOD_RESET", emel: resetEmailCache, kod: kod, newPassword: newP });
       if (res.success) { showToast("Selesai", res.message, "success"); toggleAuthView('login'); }
@@ -713,7 +729,7 @@
 
     async function forceChangePassword() {
       const oldP = document.getElementById('force-old-password').value, newP = document.getElementById('force-new-password').value;
-      if (newP.length < 6) return showToast("Ralat", "Min 6 aksara", "error");
+      if (newP.length < 8) return showToast("Ralat", "Min 8 aksara", "error");
       showToast("Menyimpan...", "Menukar kata laluan wajib...", "info");
       const res = await apiPost({ action: "CHANGE_PASSWORD", oldPassword: oldP, newPassword: newP });
       if (res.success) {
@@ -771,13 +787,13 @@
       if (sub === 'approvals') renderApprovalsList();
       if (sub === 'teachers') populateTeacherDropdowns();
       if (sub === 'analytics') initAnalytics();
-      if (sub === 'quota') { setQuotaMode(quotaMode); apiPost({ action: "GET_UNLIMITED_DATES" }).then(r => { if (r.success) { unlimitedDates = r.data; sabtuProgram = r.sabtu || []; } renderAdminQuotaCalendar(); }); }
+      if (sub === 'quota') { setQuotaMode(quotaMode); apiPost({ action: "GET_UNLIMITED_DATES" }).then(r => { if (r.success) { unlimitedDates = r.data; sabtuProgram = r.sabtu || []; setCuti(r.cuti); } renderAdminQuotaCalendar(); }); }
     }
 
     async function changeOwnPassword() {
       const oldP = document.getElementById('setting-old-pass').value, newP = document.getElementById('setting-new-pass').value;
       if (!oldP) return showToast("Ralat", "Masukkan kata laluan semasa", "error");
-      if (newP.length < 6) return showToast("Ralat", "Min 6 aksara", "error");
+      if (newP.length < 8) return showToast("Ralat", "Min 8 aksara", "error");
       const res = await apiPost({ action: "CHANGE_PASSWORD", oldPassword: oldP, newPassword: newP });
       if (res.success) { document.getElementById('setting-old-pass').value = ""; document.getElementById('setting-new-pass').value = ""; performLogout(false); showToast("Berjaya", res.message, "success"); }
       else showToast("Gagal", res.message, "error");
@@ -802,11 +818,14 @@
     }
 
     async function addNewUser() {
-      const e = document.getElementById('set-add-email').value, n = document.getElementById('set-add-nama').value, r = document.getElementById('set-add-role').value, p = document.getElementById('set-add-pass').value;
-      if (!e || !n || !p) return showToast("Ralat", "Lengkapkan semua", "error");
+      const e = document.getElementById('set-add-email').value, n = document.getElementById('set-add-nama').value, r = document.getElementById('set-add-role').value;
+      if (!e || !n) return showToast("Ralat", "Lengkapkan semua", "error");
       showToast("Menambah...", "Mendaftar dan menghantar emel pendaftaran...", "info");
-      const res = await apiPost({ action: "ADD_USER", emel: e, nama: n, role: r, tempPassword: p });
-      if (res.success) { showToast("Selesai", res.message, "success"); document.getElementById('set-add-email').value = ""; document.getElementById('set-add-nama').value = ""; loadUsersForAdmin(); }
+      const res = await apiPost({ action: "ADD_USER", emel: e, nama: n, role: r });
+      if (res.success) {
+        hideToast();
+        // Dipaparkan sekali sahaja sebagai sandaran jika emel tidak sampai
+        showConfirmModal(res.emelDihantar ? "Pengguna ditambah" : "Pengguna ditambah, emel GAGAL dihantar", `${res.message}\n\nKata laluan sementara ${e}:\n${res.tempPassword}\n\nIa tidak akan dipaparkan lagi. Pengguna wajib menukarnya semasa log masuk pertama.`, null); document.getElementById('set-add-email').value = ""; document.getElementById('set-add-nama').value = ""; loadUsersForAdmin(); }
       else showToast("Gagal", res.message, "error");
     }
 
@@ -858,7 +877,7 @@
       const fil = leaveApplications.filter(a => {
         if (!isAdmin && (a.teacherEmail || '').toLowerCase() !== currentEmel.toLowerCase()) return false; // rekod sendiri sahaja
         if (st !== 'ALL' && a.status !== st) return false;
-        if (isAdmin && tc !== 'ALL' && !samaNama(a.teacherName, tc)) return false;
+        if (isAdmin && tc !== 'ALL' && !samaNama(namaData(a), tc)) return false;
         return true;
       }).sort((a, b) => (a.appTs || 0) - (b.appTs || 0));
 
@@ -867,7 +886,7 @@
         ['nav-admin-badge', 'mob-nav-admin-badge'].forEach(id => document.getElementById(id)?.classList.toggle('hidden', !hasPending));
 
         if (tc !== 'ALL') {
-          const baki = getBakiSemasa(tc), totApp = leaveApplications.filter(x => samaNama(x.teacherName, tc)).length, totAppr = leaveApplications.filter(x => samaNama(x.teacherName, tc) && x.status === 'APPROVED').length;
+          const baki = getBakiSemasa(tc), totApp = leaveApplications.filter(x => samaNama(namaData(x), tc)).length, totAppr = leaveApplications.filter(x => samaNama(namaData(x), tc) && x.status === 'APPROVED').length;
           badgeBox.innerHTML = `<div><h4 class="font-bold text-sm text-indigo-900"><i class="fa-solid fa-filter text-indigo-400 mr-2"></i>Sejarah: ${escapeHTML(tc)}</h4><p class="text-[10px] text-indigo-700 mt-1">${totApp} Permohonan | ${totAppr} Lulus</p></div><div class="text-right"><span class="block text-[10px] text-indigo-400 font-bold">BAKI ${new Date().getFullYear()}</span><span class="text-xl font-black ${baki<=0?'text-rose-500':'text-indigo-600'}">${baki} Hari</span></div>`;
           badgeBox.classList.remove('hidden'); badgeBox.classList.add('flex');
         } else { badgeBox.classList.add('hidden'); badgeBox.classList.remove('flex'); }
@@ -881,7 +900,7 @@
         const txt = a.status==='APPROVED'?'DILULUSKAN':a.status==='REJECTED'?'DITOLAK':(isAdmin?'SEMAKAN BARU':'DALAM SEMAKAN');
         let act = "";
         if (isAdmin && a.status === 'PENDING') {
-          const baki = getBakiSemasa(a.teacherName), kel = getKelayakan(a.teacherName);
+          const baki = getBakiSemasa(namaData(a)), kel = getKelayakan(namaData(a));
           let warn = '';
           if (kel === null) warn = `<div class="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] p-2.5 rounded-lg mb-3 font-bold flex items-center gap-2"><i class="fa-solid fa-circle-question"></i> Nama ini tiada dalam DATA_GURU. Baki tidak dapat disemak.</div>`;
           else if (baki < (parseInt(a.totalDays) || 0)) warn = `<div class="bg-rose-50 text-rose-600 border border-rose-200 text-[10px] p-2.5 rounded-lg mb-3 font-bold flex items-center gap-2"><i class="fa-solid fa-triangle-exclamation"></i> Peringatan: Baki ${baki} hari, permohonan ${a.totalDays} hari.</div>`;
@@ -942,39 +961,45 @@
       for (let i = 0; i < firstDay; i++) html += `<div class="p-2"></div>`;
       for (let day = 1; day <= daysInMonth; day++) {
         const yyyymmdd = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-        const isUnlimited = unlimitedDates.includes(yyyymmdd), isProgram = sabtuProgram.includes(yyyymmdd), dayOfWeek = new Date(year, month, day).getDay();
+        const isUnlimited = unlimitedDates.includes(yyyymmdd), isProgram = sabtuProgram.includes(yyyymmdd), isCuti = cutiDates.includes(yyyymmdd), dayOfWeek = new Date(year, month, day).getDay();
         const bolehKlik = quotaMode === 'SABTU' ? dayOfWeek === 6 : true;
         let bg = isUnlimited ? "bg-purple-500 text-white shadow-md border-purple-600" : (dayOfWeek===0 ? "bg-rose-50 text-rose-400" : (dayOfWeek===6 ? "bg-slate-50 text-indigo-500 hover:bg-purple-50" : "bg-white text-slate-600 hover:bg-purple-50"));
         if (isProgram) bg += " ring-2 ring-amber-400" + (isUnlimited ? "" : " !bg-amber-400 !text-white");
+        if (isCuti) bg = "bg-teal-500 text-white shadow-md border-teal-600";
         if (!bolehKlik) bg += " opacity-30 cursor-not-allowed";
-        html += `<button ${bolehKlik ? `onclick="toggleUnlimitedDate('${yyyymmdd}')"` : 'disabled'} class="p-3 sm:p-2 rounded-xl border text-xs font-black transition-all ${bg}">${day}</button>`;
+        html += `<button ${bolehKlik ? `onclick="toggleUnlimitedDate('${yyyymmdd}')"` : 'disabled'} ${isCuti ? `title="${escapeHTML(cutiNama[yyyymmdd])}"` : ''} class="p-3 sm:p-2 rounded-xl border text-xs font-black transition-all ${bg}">${day}</button>`;
       }
       grid.innerHTML = html;
     }
 
     function setQuotaMode(mode) {
       quotaMode = mode;
-      ['TANPA_HAD', 'SABTU'].forEach(m => {
+      const WARNA = { TANPA_HAD: 'bg-purple-600 text-white border-purple-600', SABTU: 'bg-amber-500 text-white border-amber-500', CUTI: 'bg-teal-600 text-white border-teal-600' };
+      ['TANPA_HAD', 'SABTU', 'CUTI'].forEach(m => {
         const b = document.getElementById(`mode-${m}`); if (!b) return;
-        b.className = `px-4 py-2 rounded-xl border ${m === mode ? (m === 'SABTU' ? 'bg-amber-500 text-white border-amber-500' : 'bg-purple-600 text-white border-purple-600') : 'bg-white text-slate-600'}`;
+        b.className = `px-4 py-2 rounded-xl border ${m === mode ? WARNA[m] : 'bg-white text-slate-600'}`;
       });
       document.getElementById('quota-mode-help').innerText = mode === 'SABTU'
         ? "Sabtu biasanya cuti. Tanda Sabtu yang ada program supaya guru boleh mohon cuti pada hari itu (kuota 3 orang terpakai)."
-        : "Lepaskan had maksimum 3 orang guru sehari pada tarikh terpilih.";
+        : mode === 'CUTI'
+          ? "Cuti umum dan cuti sekolah bukan hari persekolahan: tidak dikira sebagai hari cuti dan tidak boleh dimohon. Cuti KPM 2027 (Kumpulan B) sudah diisi; tambah cuti lain di sini (cth Hari Kebangsaan, cuti negeri, cuti peristiwa)."
+          : "Lepaskan had maksimum 3 orang guru sehari pada tarikh terpilih.";
+      document.getElementById('admin-cuti-nama-wrap').classList.toggle('hidden', mode !== 'CUTI');
       const btn = document.getElementById('quota-bulk-btn');
-      btn.innerText = mode === 'SABTU' ? 'Tanda Semua Sabtu Dalam Julat' : 'Set Kuota Tanpa Had';
-      btn.className = `px-5 py-2 rounded-xl text-white text-xs font-bold shadow-sm transition-colors ${mode === 'SABTU' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-purple-600 hover:bg-purple-700'}`;
+      btn.innerText = mode === 'SABTU' ? 'Tanda Semua Sabtu Dalam Julat' : mode === 'CUTI' ? 'Tanda Sebagai Cuti' : 'Set Kuota Tanpa Had';
+      btn.className = `px-5 py-2 rounded-xl text-white text-xs font-bold shadow-sm transition-colors ${mode === 'SABTU' ? 'bg-amber-500 hover:bg-amber-600' : mode === 'CUTI' ? 'bg-teal-600 hover:bg-teal-700' : 'bg-purple-600 hover:bg-purple-700'}`;
       renderAdminQuotaCalendar();
     }
 
-    function senaraiIkutMode() { return quotaMode === 'SABTU' ? sabtuProgram : unlimitedDates; }
+    function senaraiIkutMode() { return quotaMode === 'SABTU' ? sabtuProgram : quotaMode === 'CUTI' ? cutiDates : unlimitedDates; }
+    function namaCutiBaharu() { return (document.getElementById('admin-cuti-nama').value || '').trim() || 'Cuti tambahan'; }
 
     async function toggleUnlimitedDate(dateStr) {
       const list = senaraiIkutMode(), ada = list.includes(dateStr);
       showToast("Menyimpan...", "Mengemaskini status tarikh", "info");
-      const res = await apiPost(ada ? { action: "REMOVE_UNLIMITED_DATE", jenis: quotaMode, date: dateStr } : { action: "ADD_UNLIMITED_DATE", jenis: quotaMode, dates: [dateStr] });
+      const res = await apiPost(ada ? { action: "REMOVE_UNLIMITED_DATE", jenis: quotaMode, date: dateStr } : { action: "ADD_UNLIMITED_DATE", jenis: quotaMode, dates: [dateStr], nama: namaCutiBaharu() });
       if (res.success) {
-        if (ada) list.splice(list.indexOf(dateStr), 1); else list.push(dateStr);
+        if (ada) list.splice(list.indexOf(dateStr), 1); else { list.push(dateStr); if (quotaMode === 'CUTI') cutiNama[dateStr] = namaCutiBaharu(); }
         renderAdminQuotaCalendar(); fetchPublicData(); hideToast();
       } else showToast("Gagal", res.message, "error");
     }
@@ -987,8 +1012,8 @@
       while (curr <= end) { const d = ymdOf(curr); if (!list.includes(d) && (quotaMode !== 'SABTU' || curr.getDay() === 6)) dates.push(d); curr.setDate(curr.getDate() + 1); }
       if (dates.length === 0) return showToast("Tiada Perubahan", quotaMode === 'SABTU' ? "Tiada Sabtu baharu dalam julat ini." : "Semua tarikh dalam julat sudah ditetapkan.", "info");
       showToast("Memproses...", "Mengeset pukal ke sistem...", "info");
-      const res = await apiPost({ action: "ADD_UNLIMITED_DATE", jenis: quotaMode, dates: dates });
-      if (res.success) { list.push(...(res.added || dates)); renderAdminQuotaCalendar(); fetchPublicData(); document.getElementById('admin-unlim-start').value = ""; document.getElementById('admin-unlim-end').value = ""; hideToast(); }
+      const res = await apiPost({ action: "ADD_UNLIMITED_DATE", jenis: quotaMode, dates: dates, nama: namaCutiBaharu() });
+      if (res.success) { list.push(...(res.added || dates)); if (quotaMode === 'CUTI') (res.added || dates).forEach(d => { cutiNama[d] = namaCutiBaharu(); }); renderAdminQuotaCalendar(); fetchPublicData(); document.getElementById('admin-unlim-start').value = ""; document.getElementById('admin-unlim-end').value = ""; hideToast(); }
       else showToast("Gagal", res.message, "error");
     }
 
