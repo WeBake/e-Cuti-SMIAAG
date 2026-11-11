@@ -7,7 +7,7 @@ var SESSION_TTL_HOURS = 12;
 var MAX_LOGIN_ATTEMPTS = 8; 
 var RATE_LIMIT_MINUTES = 5; 
 var PASSWORD_MIN = 8; // untuk kata laluan BAHARU; kata laluan lama yang lebih pendek masih boleh log masuk
-var SERVER_VERSI = "2.6"; // dipapar di bawah halaman (index.html v2.1+). Naikkan bila Code.gs berubah.
+var SERVER_VERSI = "2.7"; // dipapar di bawah halaman (index.html v2.1+). Naikkan bila Code.gs berubah.
 
 // Kelajuan: Spreadsheet dibuka sekali setiap larian; semakan tajuk tab dibuat sekali dan diingat 10 minit.
 var _SS = null, _TAB = {};
@@ -188,6 +188,7 @@ function handleMintaKodReset(payload) {
   
   for (var i = 1; i < data.length; i++) {
     if (data[i][0].toString().toLowerCase() === emel && data[i][8] === "ACTIVE") {
+      if (ssoSahaja(data[i])) { logActivity(emel, "MINTA_KOD_RESET", "BLOCKED_SSO_ONLY"); break; } // masuk melalui Profil Guru sahaja
       var kodRawak = janaKodReset();
       var hashedKod = hashPassword(kodRawak, data[i][4]); 
       var luput = new Date().getTime() + (15 * 60 * 1000); 
@@ -271,7 +272,7 @@ function handleGetUsers(payload, sessionCheck) {
   var data = pastikanTab("Users", ["Emel", "Nama", "Role", "PasswordHash", "Salt", "MestiTukarPassword", "ResetKodHash", "ResetLuput", "Status", "TarikhDaftar"]).getDataRange().getValues();
   var users = [];
   for (var i = 1; i < data.length; i++) {
-    if(data[i][8] === "ACTIVE") users.push({ emel: data[i][0], nama: data[i][1], role: data[i][2], tarikhDaftar: data[i][9] });
+    if(data[i][8] === "ACTIVE") users.push({ emel: data[i][0], nama: data[i][1], role: data[i][2], tarikhDaftar: data[i][9], ssoSahaja: ssoSahaja(data[i]) });
   }
   return jsonResponse({ success: true, data: users });
 }
@@ -313,7 +314,9 @@ var MAX_GURU_SEHARI = 3;
 var ROLE_SAH = ["ADMIN", "GURU", "STAF"];
 var KATEGORI_SAH = ["Urusan Peribadi / Keluarga", "Kecemasan & Kesihatan", "Kursus / Bengkel", "Lain-Lain"];
 var MIME_SAH = ["application/pdf", "image/png", "image/jpeg"];
-var HEADER_USERS = ["Emel", "Nama", "Role", "PasswordHash", "Salt", "MestiTukarPassword", "ResetKodHash", "ResetLuput", "Status", "TarikhDaftar"];
+// SsoSahaja = TRUE: akaun dicipta automatik daripada Profil Guru; tiada kata laluan e-Cuti, masuk melalui Profil Guru sahaja.
+var HEADER_USERS = ["Emel", "Nama", "Role", "PasswordHash", "Salt", "MestiTukarPassword", "ResetKodHash", "ResetLuput", "Status", "TarikhDaftar", "SsoSahaja"];
+function ssoSahaja(row) { return row[10] === true || String(row[10]).toUpperCase() === "TRUE"; }
 var HEADER_SESSIONS = ["Token", "Emel", "Role", "ExpiryTimestamp"];
 var HEADER_CUTI = ["ID", "NamaGuru", "Emel", "TarikhMohon", "TarikhMula", "TarikhAkhir", "JumlahHari", "SebabKategori", "SebabButiran", "Status", "JadualRelief", "NamaFailSurat", "UlasanPengetua"];
 
@@ -580,7 +583,11 @@ function handleLogin(payload) {
   }
 
   var u = cariPengguna(emel);
-  if (u && hashPassword(password, u.data[4]) === u.data[3]) {
+  if (u && ssoSahaja(u.data)) {
+    logActivity(emel, "LOGIN", "BLOCKED_SSO_ONLY");
+    return jsonResponse({ success: false, message: "Akaun ini log masuk melalui Sistem Profil Guru (menu e-Cuti), bukan dengan kata laluan." });
+  }
+  if (u && u.data[3] && hashPassword(password, u.data[4]) === u.data[3]) {
     clearRateLimit(emel);
     buangSesiTamat();
     var mesti = (u.data[5] === true || u.data[5].toString().toUpperCase() === "TRUE");
@@ -650,8 +657,14 @@ function handleSsoLogin(payload) {
   } finally { lock.releaseLock(); }
 
   var emel = String(d.emel || "").trim().toLowerCase();
-  var u = emel ? cariPengguna(emel) : null;
-  if (!u) return gagal("FAILED_NO_USER", "Emel " + emel + " tiada akaun aktif dalam e-Cuti. Hubungi pentadbir e-Cuti.", emel);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emel) || emel.length > 254) return gagal("FAILED_FORMAT", "Tiket log masuk tidak sah.");
+  var u = cariPengguna(emel);
+  if (!u) {
+    // Akaun dicipta automatik: sesiapa yang berdaftar (dengan emel) dalam Profil Guru terus mendapat akses e-Cuti sebagai GURU.
+    var hasil = ciptaAkaunDariProfil(emel, d.nama);
+    if (!hasil.ok) return gagal(hasil.sebab, hasil.mesej, emel);
+    u = cariPengguna(emel);
+  }
 
   buangSesiTamat();
   var token = Utilities.getUuid() + "-" + Utilities.getUuid();
@@ -659,6 +672,38 @@ function handleSsoLogin(payload) {
   logActivity(emel, "SSO_LOGIN", "SUCCESS");
   // Pengguna sudah disahkan oleh Profil Guru: tidak dipaksa menukar kata laluan e-Cuti.
   return jsonResponse({ success: true, token: token, emel: emel, nama: u.data[1], role: u.data[2], mestiTukarPassword: false });
+}
+
+/**
+ * Cipta akaun e-Cuti untuk guru yang datang dari Profil Guru buat kali pertama.
+ * - Peranan sentiasa GURU (ADMIN hanya ditetapkan oleh admin e-Cuti).
+ * - Tiada kata laluan (SsoSahaja): akses bergantung pada akaun Profil Guru yang aktif.
+ * - Akaun yang pernah DIPADAM oleh admin e-Cuti tidak dicipta semula secara automatik.
+ * - Baris DATA_GURU ditambah (kelayakan kosong, diisi admin) jika emel belum dipadankan.
+ */
+function ciptaAkaunDariProfil(emel, namaTiket) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return { ok: false, sebab: "FAILED_BUSY", mesej: "Pelayan sibuk. Cuba lagi." };
+  try {
+    var sheet = pastikanTab("Users", HEADER_USERS, true);
+    var data = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][0].toString().toLowerCase() !== emel) continue;
+      if (data[i][8] === "ACTIVE") return { ok: true }; // dicipta oleh permintaan serentak
+      return { ok: false, sebab: "FAILED_DELETED", mesej: "Akaun e-Cuti anda telah dipadam oleh pentadbir e-Cuti. Hubungi pentadbir untuk mengaktifkannya semula." };
+    }
+    var nama = String(namaTiket || "").replace(/\s+/g, " ").trim().substring(0, 100) || emel;
+    sheet.appendRow([sanitizeFormula(emel), sanitizeFormula(nama), "GURU", "", "", false, "", "", "ACTIVE", new Date(), true]);
+    logActivity(emel, "AKAUN_AUTO_PROFIL_GURU", "CREATED");
+
+    var peta = petaDataGuru(true);
+    if (!peta.emelKeNama[emel]) {
+      var kepala = peta.sheet.getRange(1, 1, 1, peta.sheet.getLastColumn()).getValues()[0].map(function(h) { return String(h).trim(); });
+      var baris = kepala.map(function(h) { return h === "NAMA_GURU" ? sanitizeFormula(nama) : (h === "EMEL" ? sanitizeFormula(emel) : ""); });
+      peta.sheet.appendRow(baris);
+    }
+    return { ok: true };
+  } finally { lock.releaseLock(); }
 }
 
 function handleLogout(payload) {

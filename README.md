@@ -67,6 +67,11 @@ dibuka dalam tab baru tanpa log masuk semula. Log masuk biasa (emel + kata lalua
   sekali guna, dan dibuang dari bar alamat serta-merta.
 - `SSO_LOGIN` (Code.gs) mengesahkan tiket, mencari pengguna **AKTIF mengikut emel** dalam tab `Users`, dan mencipta sesi.
   **Peranan (ADMIN/GURU/STAF) ikut tab `Users` e-Cuti**, bukan Profil Guru.
+- **Akaun dicipta automatik (v2.7):** jika emel dalam tiket belum ada dalam tab `Users`, akaun dicipta terus dengan peranan
+  GURU dan nama daripada Profil Guru, ditanda `SsoSahaja = TRUE`. Akaun ini tiada kata laluan e-Cuti: ia tidak boleh log
+  masuk dengan kata laluan atau menetapkan kata laluan melalui reset, jadi menyahaktifkan guru dalam Profil Guru terus
+  menutup akses e-Cutinya. Satu baris `DATA_GURU` (nama + emel, kelayakan kosong) ditambah untuk diisi admin.
+  Akaun yang pernah dipadam oleh admin e-Cuti tidak dicipta semula. Akaun sedia ada (dengan kata laluan) tidak berubah.
 - Script Properties projek e-Cuti mesti ada `ECUTI_SSO_SECRET` dengan nilai yang SAMA seperti projek Profil Guru.
   Tanpa nilai ini, SSO ditolak dan hanya log masuk biasa berfungsi.
 - Emel guru mesti sama dalam kedua-dua sistem (huruf besar/kecil tidak penting).
