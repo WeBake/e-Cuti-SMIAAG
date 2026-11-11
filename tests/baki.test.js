@@ -48,3 +48,10 @@ test('isiEmelDataGuru mengisi lajur EMEL bagi nama yang sepadan dan melaporkan y
   assert.equal(w.sheets.DATA_GURU.rows[1][2], 'guru.satu@contoh.test');
   assert.match(w.ctx.isiEmelDataGuru(), /^0 emel diisi/);
 });
+
+test('kelayakan kosong = lalai 12 hari; 0 yang ditaip kekal 0', () => {
+  const w = sedia();
+  w.dataGuru([['NAMA_GURU', 'BIL_CUTI_TAHUNAN_BERBAKI', 'EMEL'], ['Guru Contoh Satu', '', ''], ['Guru Sifar', 0, ''], ['Guru Lima', 5, '']]);
+  const a = w.post({ action: 'GET_DATA_GURU', token: w.adminToken }).data;
+  assert.deepEqual(a.map((x) => x.BIL_CUTI_TAHUNAN_BERBAKI), [12, 0, 5]);
+});

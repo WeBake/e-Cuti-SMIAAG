@@ -66,7 +66,8 @@ test('guru baharu dari Profil Guru: akaun e-Cuti dicipta automatik sebagai GURU,
   const dg = post({ action: 'GET_DATA_GURU', token: r.token }).data;
   const s = dg.find((x) => x.SENDIRI);
   assert.equal(s.NAMA_GURU, 'Guru Baharu Contoh', 'baris DATA_GURU ditambah dan dipadankan ikut emel');
-  assert.equal(s.BIL_CUTI_TAHUNAN_BERBAKI, 0, 'kelayakan kosong sehingga diisi admin');
+  assert.equal(s.BIL_CUTI_TAHUNAN_BERBAKI, 12, 'kelayakan lalai 12 hari setahun; admin ubah secara manual');
+  assert.equal(sheets.DATA_GURU.rows.find((x) => x.includes('baharu@contoh.test'))[1], 12, 'angka 12 ditulis dalam Sheet supaya admin nampak');
   // kali kedua: tiada akaun atau baris berganda
   assert.equal(post({ action: 'SSO_LOGIN', tiket: tiket(RAHSIA, { emel: 'baharu@contoh.test', nama: 'Guru Baharu Contoh' }) }).success, true);
   assert.equal(sheets.Users.rows.filter((x) => x[0] === 'baharu@contoh.test').length, 1);

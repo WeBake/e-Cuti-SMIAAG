@@ -7,7 +7,7 @@ var SESSION_TTL_HOURS = 12;
 var MAX_LOGIN_ATTEMPTS = 8; 
 var RATE_LIMIT_MINUTES = 5; 
 var PASSWORD_MIN = 8; // untuk kata laluan BAHARU; kata laluan lama yang lebih pendek masih boleh log masuk
-var SERVER_VERSI = "2.7"; // dipapar di bawah halaman (index.html v2.1+). Naikkan bila Code.gs berubah.
+var SERVER_VERSI = "2.8"; // dipapar di bawah halaman (index.html v2.1+). Naikkan bila Code.gs berubah.
 
 // Kelajuan: Spreadsheet dibuka sekali setiap larian; semakan tajuk tab dibuat sekali dan diingat 10 minit.
 var _SS = null, _TAB = {};
@@ -699,7 +699,7 @@ function ciptaAkaunDariProfil(emel, namaTiket) {
     var peta = petaDataGuru(true);
     if (!peta.emelKeNama[emel]) {
       var kepala = peta.sheet.getRange(1, 1, 1, peta.sheet.getLastColumn()).getValues()[0].map(function(h) { return String(h).trim(); });
-      var baris = kepala.map(function(h) { return h === "NAMA_GURU" ? sanitizeFormula(nama) : (h === "EMEL" ? sanitizeFormula(emel) : ""); });
+      var baris = kepala.map(function(h) { return h === "NAMA_GURU" ? sanitizeFormula(nama) : (h === "EMEL" ? sanitizeFormula(emel) : (h === "BIL_CUTI_TAHUNAN_BERBAKI" ? KELAYAKAN_LALAI : "")); });
       peta.sheet.appendRow(baris);
     }
     return { ok: true };
@@ -807,6 +807,8 @@ function handleEditUser(payload, sessionCheck) {
 // (abaikan huruf besar/kecil dan ruang berlebihan) selagi hanya SATU akaun aktif bernama begitu.
 function normNama(v) { return String(v === null || v === undefined ? "" : v).replace(/\s+/g, " ").trim().toUpperCase(); }
 
+var KELAYAKAN_LALAI = 12; // hari cuti tahunan setahun jika lajur BIL_CUTI_TAHUNAN_BERBAKI kosong; admin ubah angka dalam DATA_GURU
+
 function petaDataGuru(semakSemula) {
   var sheet = pastikanTab("DATA_GURU", ["NAMA_GURU", "BIL_CUTI_TAHUNAN_BERBAKI", "EMEL"], semakSemula);
   var data = sheet.getDataRange().getValues();
@@ -827,7 +829,9 @@ function petaDataGuru(semakSemula) {
     var padan = emel ? "EMEL" : "";
     if (!emel) { var c = ikutNama[normNama(nama)] || []; if (c.length === 1) { emel = c[0]; padan = "NAMA"; } }
     if (emel && !emelKeNama[emel]) emelKeNama[emel] = nama;
-    senarai.push({ baris: i + 1, nama: nama, kelayakan: parseInt(data[i][iBil], 10) || 0, emel: emel, padan: padan });
+    var bil = data[i][iBil];
+    var kelayakan = (bil === "" || bil === null || bil === undefined) ? KELAYAKAN_LALAI : (parseInt(bil, 10) || 0); // 0 yang ditaip kekal 0
+    senarai.push({ baris: i + 1, nama: nama, kelayakan: kelayakan, emel: emel, padan: padan });
   }
   return { sheet: sheet, lajurEmel: iEmel + 1, senarai: senarai, emelKeNama: emelKeNama };
 }

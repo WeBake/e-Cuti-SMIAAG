@@ -2,7 +2,7 @@
 
 Sistem permohonan cuti tahunan guru SMI Al-Amin Gombak.
 
-- Frontend: `public/index.html` (Tailwind CDN, vanilla JS), dihoskan di Netlify — https://ecutismiaag.netlify.app/
+- Frontend: `public/index.html` (Tailwind dibina ke `public/vendor/`, vanilla JS), dihoskan di Netlify — https://ecutismiaag.netlify.app/
 - Backend: `apps-script/Code.gs` (Google Apps Script + Google Sheets + Google Drive)
 
 ## Struktur
@@ -40,6 +40,26 @@ Kalau Code.gs dan index.html sama-sama berubah, deploy Apps Script DULU, baru me
 - Jangan "Publish to web" mana-mana tab Sheet.
 - Repo ini public: jangan commit Sheet ID, password, atau data guru.
 - Salt password disimpan dalam Script Properties (`APP_SECURITY_SALT`), bukan dalam kod.
+
+## Gaya, ikon dan keselamatan halaman (v2.8)
+
+Tiada lagi pustaka dari CDN. Semua dihos dalam `public/vendor/`: Tailwind (CSS dibina), Font Awesome 6.4.0 (solid dan
+regular), fon Plus Jakarta Sans dan Chart.js 4.4.1. Halaman mempunyai Content-Security-Policy (meta dalam `index.html`
+dan header dalam `netlify.toml`): skrip dan gaya hanya dari laman sendiri, sambungan rangkaian hanya ke Apps Script.
+
+**Selepas menambah atau menukar kelas Tailwind dalam `public/index.html`, bina semula CSS:**
+
+```
+npm install
+npm run css
+```
+
+kemudian commit `public/vendor/tailwind.css`. Pratonton GitHub Pages membina CSS sendiri dan memberi amaran jika fail dalam
+repo ketinggalan; Netlify menggunakan fail dalam repo. Kelas yang dibina secara dinamik mesti ditulis penuh dalam kod
+(contoh `'text-rose-500'`, bukan `'text-' + warna`), jika tidak ia tidak akan ada dalam CSS.
+
+Kelayakan cuti: jika lajur `BIL_CUTI_TAHUNAN_BERBAKI` kosong, kelayakan lalai ialah 12 hari setahun; akaun yang dicipta
+automatik ditulis 12. Admin mengubah angka terus dalam `DATA_GURU`.
 
 ## Kata laluan, baki, cuti dan penyelenggaraan (v2.6)
 
