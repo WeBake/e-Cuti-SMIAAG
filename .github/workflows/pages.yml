@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['public/**', '.github/workflows/pages.yml']
+    paths: ['public/**', 'src/**', 'tailwind.config.js', '.github/workflows/pages.yml']
 
 permissions:
   contents: read
@@ -33,6 +33,9 @@ jobs:
         run: |
           set -euo pipefail
           cp -r public _site
+          # Bina semula CSS Tailwind daripada index.html semasa (jika fail dalam repo ketinggalan, pratonton tetap betul)
+          npx --yes tailwindcss@3.4.17 -c tailwind.config.js -i src/tailwind.css -o _site/vendor/tailwind.css --minify
+          cmp -s _site/vendor/tailwind.css public/vendor/tailwind.css || echo "::warning::public/vendor/tailwind.css ketinggalan. Jalankan 'npm run css' dan commit supaya Netlify juga betul."
           if [ -n "${GAS_URL}" ]; then
             case "${GAS_URL}" in https://script.google.com/macros/s/*/exec) ;; *) echo "::error::GAS_URL mesti URL Web App yang berakhir /exec"; exit 1;; esac
             sed -i -E "s#const GAS_URL = \"[^\"]*\";#const GAS_URL = \"${GAS_URL}\";#" _site/index.html

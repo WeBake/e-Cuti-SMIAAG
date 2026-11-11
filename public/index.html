@@ -5,20 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>e-Cuti SMIAAG | Sistem Pengurusan Cuti Tahunan Guru</title>
   
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Keselamatan: semua skrip, gaya dan fon dihos sendiri (public/vendor). Sambungan rangkaian hanya ke Apps Script. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src https://script.google.com https://script.googleusercontent.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <link rel="stylesheet" href="vendor/tailwind.css">
+  <link rel="stylesheet" href="vendor/fontawesome/css/fontawesome.min.css">
+  <link rel="stylesheet" href="vendor/fontawesome/css/solid.min.css">
+  <link rel="stylesheet" href="vendor/fontawesome/css/regular.min.css">
+  <script src="vendor/chart.umd.js"></script>
   <script>
     // Set tema sebelum halaman dilukis supaya tak "berkelip"
     try { if (localStorage.getItem('smiaag_theme') === 'dark') document.documentElement.classList.replace('light', 'dark'); } catch(e) {}
-  </script>
-
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: { extend: { fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'] } } }
-    }
   </script>
 
   <style>
@@ -395,7 +391,7 @@
     const GAS_URL = "https://script.google.com/macros/s/AKfycbyIQ15mj6bJN1dbQ2HyZ-L03GlGqjd-xvaVwfhPB5HUp8MmLzDZZE0vNMsV6jarca90ZQ/exec";
     // ====================================================================
 
-    const VERSI_WEB = "v2.7"; // tukar bila index.html dikemas kini
+    const VERSI_WEB = "v2.8"; // tukar bila index.html dikemas kini
     const MAX_GURU_SEHARI = 3;
     const BULAN = ["Januari","Februari","Mac","April","Mei","Jun","Julai","Ogos","September","Oktober","November","Disember"];
 
